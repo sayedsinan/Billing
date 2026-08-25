@@ -126,9 +126,13 @@ class LoginPage extends StatelessWidget {
                         width: 300,
                         height: 50,
                         color: Colors.blue,
-                        onPressed: authController.isLoading.value
-                            ? () {}
-                            : () => _submit(context, authController),
+                        onPressed:(){
+                          authController.isLoading.value
+                              ? null
+                              : _submit(context, authController);
+                        }
+                            // ? () {}
+                            // : () => _submit(context, authController),
                       ),
                     ],
                   ),

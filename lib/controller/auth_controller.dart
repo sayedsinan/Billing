@@ -72,8 +72,8 @@ class AuthController extends GetxController {
   }
 
   Future<bool> register({String? role}) async {
-    final name = "fida";
-    final email = "fida@gmail.com";
+    final name = "grillo";
+    final email = "grillo@gmail.com";
     final password = "123456";
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       errorMessage.value = 'Fill in all fields';

@@ -9,8 +9,9 @@ import 'package:test_bill/service/api_service.dart';
 import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/theme/colors.dart';
 
-/// A takeout / counter bill: no table involved. Search the product catalog,
-/// tap to add, generate + print directly via ApiService.createDirectBill.
+/// A takeout / counter bill: no table involved. Browse the product catalog
+/// as tappable blocks (same UI as the table order dialog), generate + print
+/// directly via ApiService.createDirectBill.
 class TakeoutBillDialog extends StatefulWidget {
   const TakeoutBillDialog({super.key});
 
@@ -46,6 +47,9 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
   double get _subtotal => _items.fold(0, (s, i) => s + i.total);
 
+  /// Adds a product from the catalog to the current order immediately.
+  /// If the product is already on the bill, its quantity is bumped by 1
+  /// instead of creating a duplicate line.
   void _addProductToOrder(Product p) {
     setState(() {
       final idx = _items.indexWhere((i) => i.name == p.name);
@@ -54,8 +58,21 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       } else {
         _items.add(OrderItem(name: p.name, qty: 1, rate: p.price));
       }
-      _productSearchCtrl.clear();
-      _productQuery = '';
+    });
+  }
+
+  /// Decreases a product's quantity by 1. Removes the line entirely once
+  /// it hits 0, so the block goes back to its normal "tap to add" state.
+  void _decreaseProductFromOrder(Product p) {
+    setState(() {
+      final idx = _items.indexWhere((i) => i.name == p.name);
+      if (idx < 0) return;
+      final newQty = _items[idx].qty - 1;
+      if (newQty <= 0) {
+        _items.removeAt(idx);
+      } else {
+        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: p.price);
+      }
     });
   }
 
@@ -117,7 +134,9 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       }
     } on PrintException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: kRed),
+        );
       }
     } finally {
       if (mounted) setState(() => _printing = false);
@@ -129,9 +148,10 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SizedBox(
-        width: 600,
+        width: 820,
+        height: MediaQuery.of(context).size.height * 0.85,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Header
             Container(
@@ -149,41 +169,35 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
             ),
 
             // Body
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Customer Name (optional)', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _customerNameCtrl,
-                          decoration: InputDecoration(
-                            hintText: 'e.g. Walk-in / Ravi',
-                            hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-                            filled: true,
-                            fillColor: kBgGray,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                          ),
-                        ),
-                      ],
+                    const Text('Customer Name (optional)', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _customerNameCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Walk-in / Ravi',
+                        hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                        filled: true,
+                        fillColor: kBgGray,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      ),
                     ),
                     const SizedBox(height: 20),
 
                     const Text('Order Items', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
                     const SizedBox(height: 8),
 
-                    // ── Search products, tap to add straight to the bill ──
+                    // ── Optional search to narrow the block grid below ──
                     TextField(
                       controller: _productSearchCtrl,
-                      autofocus: true,
                       decoration: InputDecoration(
-                        hintText: 'Search products to add to bill...',
+                        hintText: 'Search products (optional) — or just tap a block below...',
                         hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
                         prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
                         filled: true,
@@ -193,53 +207,57 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                       ),
                       onChanged: (v) => setState(() => _productQuery = v),
                     ),
-                    if (_productQuery.trim().isNotEmpty)
-                      Obx(() {
-                        final q = _productQuery.toLowerCase();
-                        final matches = _productController.products
-                            .where((p) => p.name.toLowerCase().contains(q))
-                            .take(6)
-                            .toList();
-                        if (matches.isEmpty) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text('No products match "$_productQuery"',
-                                style: const TextStyle(color: kTextGray, fontSize: 12)),
-                          );
-                        }
-                        return Container(
-                          margin: const EdgeInsets.only(top: 6),
-                          decoration: BoxDecoration(
-                            color: kWhite,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: kBgGray, width: 1.5),
-                          ),
-                          child: Column(
-                            children: matches.map((p) {
-                              return InkWell(
-                                onTap: () => _addProductToOrder(p),
-                                borderRadius: BorderRadius.circular(10),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(p.name,
-                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kTextDark)),
-                                      ),
-                                      Text('₹${p.price.toStringAsFixed(0)}',
-                                          style: const TextStyle(fontSize: 12, color: kBlue, fontWeight: FontWeight.w700)),
-                                      const SizedBox(width: 8),
-                                      const Icon(Icons.add_circle_rounded, color: kGreen, size: 18),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
+                    const SizedBox(height: 10),
+
+                    // ── Tappable product blocks — browse & tap, no typing needed ──
+                    Obx(() {
+                      final products = _productController.products;
+                      final q = _productQuery.toLowerCase();
+                      final matches = q.isEmpty
+                          ? products
+                          : products.where((p) => p.name.toLowerCase().contains(q)).toList();
+
+                      if (_productController.isLoading.value && products.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator(color: kOrange)),
+                        );
+                      }
+
+                      if (matches.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            products.isEmpty ? 'No products in catalog yet' : 'No products match "$_productQuery"',
+                            style: const TextStyle(color: kTextGray, fontSize: 12),
                           ),
                         );
-                      }),
-                    const SizedBox(height: 12),
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(10),
+                        constraints: const BoxConstraints(maxHeight: 320),
+                        decoration: BoxDecoration(
+                          color: kBgGray,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: matches.map((p) => _TakeoutProductBlock(
+                              product: p,
+                              qtyInOrder: _items
+                                  .where((i) => i.name == p.name)
+                                  .fold(0.0, (s, i) => s + i.qty),
+                              onTap: () => _addProductToOrder(p),
+                              onDecrease: () => _decreaseProductFromOrder(p),
+                            )).toList(),
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 20),
 
                     Row(
                       children: [
@@ -249,7 +267,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                           onPressed: () => setState(() => _items.add(OrderItem(name: '', qty: 1, rate: 0))),
                           icon: const Icon(Icons.add_rounded, size: 16),
                           label: const Text('Custom Item'),
-                          style: TextButton.styleFrom(foregroundColor: kBlue),
+                          style: TextButton.styleFrom(foregroundColor: kOrange),
                         ),
                       ],
                     ),
@@ -258,7 +276,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                     if (_items.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text('No items yet — search above to add products', style: TextStyle(color: kTextGray, fontSize: 13)),
+                        child: Text('No items ordered yet — tap a product block above to add', style: TextStyle(color: kTextGray, fontSize: 13)),
                       )
                     else ...[
                       Container(
@@ -389,6 +407,102 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   }
 }
 
+// ─── Product Block (tappable card, no typing needed) ──────────────────────────
+// Same look & behavior as the table order dialog's product block: tap to add,
+// then a − qty + control appears once it's on the bill.
+class _TakeoutProductBlock extends StatelessWidget {
+  final Product product;
+  final double qtyInOrder;
+  final VoidCallback onTap;
+  final VoidCallback onDecrease;
+  const _TakeoutProductBlock({
+    required this.product,
+    required this.qtyInOrder,
+    required this.onTap,
+    required this.onDecrease,
+  });
+
+  String get _qtyLabel => qtyInOrder == qtyInOrder.toInt() ? '${qtyInOrder.toInt()}' : '$qtyInOrder';
+
+  @override
+  Widget build(BuildContext context) {
+    final inOrder = qtyInOrder > 0;
+    return Container(
+      width: 140,
+      height: 92,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: inOrder ? kOrange.withOpacity(0.10) : kWhite,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: inOrder ? kOrange : kBgGray, width: inOrder ? 1.5 : 1),
+        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: InkWell(
+        // Tapping anywhere else on the card (when not yet ordered) still adds it.
+        onTap: inOrder ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              product.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kTextDark),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('₹${product.price.toStringAsFixed(0)}',
+                    style: const TextStyle(fontSize: 12, color: kDarkBlue, fontWeight: FontWeight.w700)),
+                if (!inOrder)
+                  InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(20),
+                    child: const Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
+                  )
+                else
+                  // ── − qty + control, replaces the plain add icon once ordered ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          onTap: onDecrease,
+                          borderRadius: BorderRadius.circular(20),
+                          child: const Padding(
+                            padding: EdgeInsets.all(2),
+                            child: Icon(Icons.remove_circle_rounded, color: kRed, size: 20),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(_qtyLabel,
+                              style: const TextStyle(color: kOrange, fontSize: 12, fontWeight: FontWeight.w800)),
+                        ),
+                        InkWell(
+                          onTap: onTap,
+                          borderRadius: BorderRadius.circular(20),
+                          child: const Padding(
+                            padding: EdgeInsets.all(2),
+                            child: Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Takeout Item Row (same shape as the table dialog's row) ──────────────────
 class _TakeoutItemRow extends StatefulWidget {
   final OrderItem item;
@@ -416,6 +530,8 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
   @override
   void didUpdateWidget(covariant _TakeoutItemRow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Keep the text fields in sync if the item was updated from outside
+    // (e.g. tapping the same product block again bumps qty).
     if (oldWidget.item != widget.item) {
       final newQty = widget.item.qty == widget.item.qty.toInt()
           ? widget.item.qty.toInt().toString()

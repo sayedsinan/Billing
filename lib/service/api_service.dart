@@ -66,7 +66,7 @@ class ApiService {
   // iOS simulator / desktop / web (localhost server): http://localhost:3000/api
   // Physical device: http://<your-computer-LAN-ip>:3000/api
   // Production: https://your-domain.com/api
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
 
   // ── Token management ──────────────────────────────────────────────────
   String? get token => _box.read<String>(_tokenKey);
