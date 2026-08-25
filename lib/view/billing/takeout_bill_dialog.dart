@@ -122,11 +122,10 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       }
     }
   }
-
   Future<void> _printBill(Bill bill) async {
     setState(() => _printing = true);
     try {
-      await PrintService.instance.printBill(bill);
+      await PrintService.instance.printBillWithKOT(bill);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),

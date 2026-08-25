@@ -281,7 +281,7 @@ class _TableOrderPageState extends State<TableOrderPage> {
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       final latest = bills.first;
 
-      await PrintService.instance.printBill(latest);
+      await PrintService.instance.printBillWithKOT(latest);
 
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
@@ -298,7 +298,6 @@ class _TableOrderPageState extends State<TableOrderPage> {
       }
     }
   }
-
   void _confirmDelete(BuildContext ctx, TableController controller, DiningTable table) {
     showDialog(
       context: ctx,

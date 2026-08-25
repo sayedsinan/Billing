@@ -145,6 +145,72 @@ class PrintService {
 
     return Uint8List.fromList(builder.build());
   }
+    /// Sends bill to printer twice: normal customer copy + kitchen copy (no prices).
+  Future<void> printBillWithKOT(Bill bill, {String? printerName}) async {
+    await printBill(bill, printerName: printerName);
+    await printKitchenBill(bill, printerName: printerName);
+  }
+
+  /// Kitchen Order Ticket — item names + qty only, no prices/totals.
+  Future<void> printKitchenBill(Bill bill, {String? printerName}) async {
+    final target = printerName ?? await resolvePrinter();
+    if (target == null) {
+      throw PrintException(
+        'No printer found. Make sure your thermal printer is connected and installed in Windows.',
+      );
+    }
+
+    final bytes = _buildKitchenReceiptBytes(bill);
+
+    try {
+      await WindowsPrinter.printRawData(
+        printerName: target,
+        data: bytes,
+        useRawDatatype: true,
+      );
+    } catch (e) {
+      throw PrintException('Could not print kitchen bill ${bill.billNumber}: $e');
+    }
+  }
+
+  Uint8List _buildKitchenReceiptBytes(Bill bill) {
+    const center = WPTextStyle(align: WPTextAlign.center);
+    const centerBold = WPTextStyle(align: WPTextAlign.center, bold: true);
+    const itemStyle = WPTextStyle(bold: true, size: WPTextSize.doubleHeight);
+
+    final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
+
+    builder.header('KITCHEN ORDER');
+    builder.line('Bill #${bill.billNumber}', style: center);
+    builder.line(_formatDate(bill.createdAt), style: center);
+    builder.separator();
+
+    if (bill.tableId != null && bill.tableId!.isNotEmpty) {
+      builder.item('Table', bill.tableId!);
+    }
+    if (bill.waiter != null && bill.waiter!.isNotEmpty) {
+      builder.item('Waiter', bill.waiter!);
+    }
+    if (bill.customerName != null && bill.customerName!.isNotEmpty) {
+      builder.item('Customer', bill.customerName!);
+    }
+    builder.separator();
+    builder.line('ITEMS', style: centerBold);
+    builder.blank();
+
+    for (final item in bill.items) {
+      final qtyLabel = item.qty == item.qty.roundToDouble()
+          ? item.qty.toInt().toString()
+          : item.qty.toString();
+      builder.line('$qtyLabel x ${item.name}', style: itemStyle);
+    }
+
+    builder.blank();
+    builder.separator();
+    builder.cut();
+
+    return Uint8List.fromList(builder.build());
+  }
 
   String _formatDate(DateTime dt) {
     final d = dt.toLocal();
