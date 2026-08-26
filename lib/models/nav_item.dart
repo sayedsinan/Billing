@@ -9,7 +9,7 @@ class NavItem {
 
 const kNavItems = [
   NavItem(Icons.home_rounded, 'Dashboard'),
-  NavItem(Icons.receipt_long_rounded, 'Billing', badge: 'New'),
+  NavItem(Icons.receipt_long_rounded, 'Billing',),
   NavItem(Icons.inventory_2_rounded, 'Stock'),
   NavItem(Icons.bar_chart_rounded, 'Reports'),
   NavItem(Icons.people_rounded, 'Customers'),

@@ -4,6 +4,7 @@ import 'package:test_bill/view/attendance/attendance_page.dart';
 import 'package:test_bill/view/billing/billing_page.dart';
 
 import 'package:test_bill/view/product/product_page.dart';
+import 'package:test_bill/view/reports/reports_page.dart';
 import 'package:test_bill/view/stock/stock_page.dart';
 import 'package:test_bill/view/widgets/dashboard_content.dart';
 import 'package:test_bill/view/widgets/nav_tile.dart';
@@ -218,6 +219,8 @@ class _HomePageState extends State<HomePage> {
                       ? const TableOrderPage()
                       : _selectedIndex == 2
                       ? const StockPage()
+                      :   _selectedIndex == 3
+                      ? const ReportsPage()
                       : _selectedIndex == 5
                       ? const ProductsPage()
                        : _selectedIndex == 7

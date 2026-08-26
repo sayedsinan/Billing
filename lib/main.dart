@@ -7,10 +7,10 @@ import 'package:test_bill/view/login/login_screen.dart';
 import 'package:get/get.dart';
 
 void main() {
-  Get.put(ProductController());
-  Get.put(AuthController());
-  Get.put(TableController());
-  Get.put(BillController());
+  Get.lazyPut(() => ProductController());
+  Get.lazyPut(() => AuthController());
+  Get.lazyPut(() => TableController());
+  Get.lazyPut(() => BillController());
   runApp(const MyApp());
 }
 

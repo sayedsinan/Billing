@@ -12,9 +12,11 @@ class BillController extends GetxController {
   final RxList<CartItem> cart = <CartItem>[].obs;
   final RxDouble taxRate = 5.0.obs; // percent
   final RxDouble discount = 0.0.obs;
+  final RxBool isDeleting = false.obs;
 
   double get cartSubtotal => cart.fold(0, (sum, item) => sum + item.total);
-  double get cartTaxAmount => ((cartSubtotal - discount.value) * taxRate.value / 100);
+  double get cartTaxAmount =>
+      ((cartSubtotal - discount.value) * taxRate.value / 100);
   double get cartGrandTotal => cartSubtotal - discount.value + cartTaxAmount;
   int get cartItemCount => cart.fold(0, (sum, item) => sum + item.qty.toInt());
 
@@ -74,8 +76,11 @@ class BillController extends GetxController {
   /// Returns the created [Bill] on success, or null on failure (a snackbar is shown).
   Future<Bill?> checkout({String? customerName}) async {
     if (cart.isEmpty) {
-      Get.snackbar('Empty cart', 'Add at least one product before checking out',
-          snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Empty cart',
+        'Add at least one product before checking out',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return null;
     }
 
@@ -98,7 +103,11 @@ class BillController extends GetxController {
       clearCart();
       return bill;
     } on ApiException catch (e) {
-      Get.snackbar('Checkout failed', e.message, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Checkout failed',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return null;
     } finally {
       isCheckingOut.value = false;
@@ -106,7 +115,11 @@ class BillController extends GetxController {
   }
 
   /// Generates a bill from a restaurant table's current order instead of the cart.
-  Future<Bill?> checkoutTable(String tableMongoId, {double? taxRatePct, double? discountAmt}) async {
+  Future<Bill?> checkoutTable(
+    String tableMongoId, {
+    double? taxRatePct,
+    double? discountAmt,
+  }) async {
     isCheckingOut.value = true;
     try {
       final data = await _api.generateTableBill(
@@ -119,7 +132,11 @@ class BillController extends GetxController {
       bills.insert(0, bill);
       return bill;
     } on ApiException catch (e) {
-      Get.snackbar('Failed to generate bill', e.message, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Failed to generate bill',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return null;
     } finally {
       isCheckingOut.value = false;
@@ -151,11 +168,17 @@ class BillController extends GetxController {
     try {
       await _printer.printBill(
         bill,
-        printerName: selectedPrinter.value.isEmpty ? null : selectedPrinter.value,
+        printerName: selectedPrinter.value.isEmpty
+            ? null
+            : selectedPrinter.value,
       );
       return true;
     } on PrintException catch (e) {
-      Get.snackbar('Print failed', e.message, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Print failed',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return false;
     } finally {
       isPrinting.value = false;
@@ -166,7 +189,11 @@ class BillController extends GetxController {
   Future<bool> printLastBill() async {
     final bill = lastBill.value;
     if (bill == null) {
-      Get.snackbar('Nothing to print', 'Generate a bill first', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Nothing to print',
+        'Generate a bill first',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return false;
     }
     return printBill(bill);
@@ -176,17 +203,60 @@ class BillController extends GetxController {
   final RxList<Bill> bills = <Bill>[].obs;
   final RxBool isLoadingBills = false.obs;
   final RxDouble totalRevenue = 0.0.obs;
-
-  Future<void> fetchBills({String? status, String? tableId, DateTime? from, DateTime? to}) async {
+  Future<void> fetchBills({
+    String? status,
+    String? tableId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
     isLoadingBills.value = true;
     try {
-      final data = await _api.getBills(status: status, tableId: tableId, from: from, to: to);
-      bills.assignAll(data.map((e) => Bill.fromJson(e as Map<String, dynamic>)));
+      final result = await _api.getBills(
+        status: status,
+        tableId: tableId,
+        from: from,
+        to: to,
+      );
+      final list = (result['data'] as List<dynamic>? ?? []);
+      bills.assignAll(
+        list.map((e) => Bill.fromJson(e as Map<String, dynamic>)),
+      );
+      totalRevenue.value = (result['totalRevenue'] as num?)?.toDouble() ?? 0.0;
     } on ApiException catch (e) {
       Get.snackbar('Error', e.message, snackPosition: SnackPosition.BOTTOM);
     } finally {
       isLoadingBills.value = false;
     }
+  }
+
+  Future<bool> deleteBill(String billId) async {
+    isDeleting.value = true;
+    try {
+      await _api.deleteBill(billId);
+      bills.removeWhere((b) => b.id == billId);
+      if (lastBill.value?.id == billId) lastBill.value = null;
+      _recomputeTotalRevenue();
+      Get.snackbar(
+        'Deleted',
+        'Transaction removed',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return true;
+    } on ApiException catch (e) {
+      Get.snackbar(
+        'Delete failed',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return false;
+    } finally {
+      isDeleting.value = false;
+    }
+  }
+
+  void _recomputeTotalRevenue() {
+    totalRevenue.value = bills
+        .fold(0.0, (sum, b) => sum + b.grandTotal);
   }
 
   Future<bool> payBill(String billId, String paymentMethod) async {
@@ -196,9 +266,15 @@ class BillController extends GetxController {
       final idx = bills.indexWhere((b) => b.id == updated.id);
       if (idx >= 0) bills[idx] = updated;
       if (lastBill.value?.id == updated.id) lastBill.value = updated;
+      _recomputeTotalRevenue(); // ← add this
+
       return true;
     } on ApiException catch (e) {
-      Get.snackbar('Payment failed', e.message, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Payment failed',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return false;
     }
   }

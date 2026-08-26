@@ -14,45 +14,43 @@ class ApiException implements Exception {
 
 class ApiService {
   ApiService._internal() {
-  _dio = Dio(
-    BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    ),
-  );
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {'Content-Type': 'application/json'},
+      ),
+    );
 
-  // JWT Interceptor
-  _dio.interceptors.add(
-    InterceptorsWrapper(
-      onRequest: (options, handler) {
-        final token = _box.read<String>(_tokenKey);
+    // JWT Interceptor
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final token = _box.read<String>(_tokenKey);
 
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
 
-        handler.next(options);
-      },
-    ),
-  );
+          handler.next(options);
+        },
+      ),
+    );
 
-  // Log every request & response
-  _dio.interceptors.add(
-    LogInterceptor(
-      request: true,
-      requestHeader: true,
-      requestBody: true,
-      responseHeader: false,
-      responseBody: true,
-      error: true,
-      logPrint: (object) => print(object),
-    ),
-  );
-}
+    // Log every request & response
+    _dio.interceptors.add(
+      LogInterceptor(
+        request: true,
+        requestHeader: true,
+        requestBody: true,
+        responseHeader: false,
+        responseBody: true,
+        error: true,
+        logPrint: (object) => print(object),
+      ),
+    );
+  }
 
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
@@ -61,7 +59,7 @@ class ApiService {
   final GetStorage _box = GetStorage();
   static const _tokenKey = 'auth_token';
 
-//Production
+  //Production
   // static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
   //Development
   static const String baseUrl = 'http://localhost:3000/api';
@@ -73,60 +71,75 @@ class ApiService {
   void saveToken(String token) => _box.write(_tokenKey, token);
   void clearToken() => _box.remove(_tokenKey);
 
-Future<dynamic> _request(Future<Response> Function() call) async {
-  try {
-    final res = await call();
-    final body = res.data;
+  Future<dynamic> _request(
+    Future<Response> Function() call, {
+    bool fullResponse = false,
+  }) async {
+    try {
+      final res = await call();
+      final body = res.data;
 
-    print("✅ SUCCESS");
-    print(body);
+      print("✅ SUCCESS");
+      print(body);
 
-    if (body is Map && body['success'] == true) {
-      return body['data'];
+      if (fullResponse) return body;
+
+      if (body is Map && body['success'] == true) {
+        return body['data'];
+      }
+
+      return body is Map && body.containsKey('data') ? body['data'] : body;
+    } on DioException catch (e) {
+      print("❌ API ERROR");
+      print("Status Code : ${e.response?.statusCode}");
+      print("Response    : ${e.response?.data}");
+      print("Request Data: ${e.requestOptions.data}");
+
+      final serverMessage = e.response?.data is Map
+          ? e.response?.data['message']
+          : null;
+
+      throw ApiException(
+        serverMessage ?? e.message ?? 'Network error',
+        statusCode: e.response?.statusCode,
+      );
+    } catch (e) {
+      print("❌ Unexpected Error: $e");
+      throw ApiException('Unexpected error: $e');
     }
-
-    return body is Map && body.containsKey('data')
-        ? body['data']
-        : body;
-  } on DioException catch (e) {
-    print("❌ API ERROR");
-    print("Status Code : ${e.response?.statusCode}");
-    print("Response    : ${e.response?.data}");
-    print("Request Data: ${e.requestOptions.data}");
-
-    final serverMessage =
-        e.response?.data is Map ? e.response?.data['message'] : null;
-
-    throw ApiException(
-      serverMessage ?? e.message ?? 'Network error',
-      statusCode: e.response?.statusCode,
-    );
-  } catch (e) {
-    print("❌ Unexpected Error: $e");
-    throw ApiException('Unexpected error: $e');
   }
-}
   // ── Auth ─────────────────────────────────────────────────────────────
+
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
     required String password,
     String? role,
   }) async {
-    final data = await _request(() => _dio.post('/auth/register', data: {
+    final data = await _request(
+      () => _dio.post(
+        '/auth/register',
+        data: {
           'name': name,
           'email': email,
           'password': password,
           if (role != null) 'role': role,
-        }));
+        },
+      ),
+    );
     return Map<String, dynamic>.from(data);
   }
 
-  Future<Map<String, dynamic>> login({required String email, required String password}) async {
-    final data = await _request(() => _dio.post('/auth/login', data: {
-          'email': email,
-          'password': password,
-        }));
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final data = await _request(
+      () => _dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      ),
+    );
     return Map<String, dynamic>.from(data);
   }
 
@@ -137,10 +150,15 @@ Future<dynamic> _request(Future<Response> Function() call) async {
 
   // ── Products ─────────────────────────────────────────────────────────
   Future<List<dynamic>> getProducts({String? search, String? category}) async {
-    final data = await _request(() => _dio.get('/products', queryParameters: {
+    final data = await _request(
+      () => _dio.get(
+        '/products',
+        queryParameters: {
           if (search != null && search.isNotEmpty) 'search': search,
           if (category != null) 'category': category,
-        }));
+        },
+      ),
+    );
     return List<dynamic>.from(data);
   }
 
@@ -149,12 +167,17 @@ Future<dynamic> _request(Future<Response> Function() call) async {
     return List<String>.from(data);
   }
 
-  Future<Map<String, dynamic>> createProduct(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createProduct(
+    Map<String, dynamic> payload,
+  ) async {
     final data = await _request(() => _dio.post('/products', data: payload));
     return Map<String, dynamic>.from(data);
   }
 
-  Future<Map<String, dynamic>> updateProduct(String id, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateProduct(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
     final data = await _request(() => _dio.put('/products/$id', data: payload));
     return Map<String, dynamic>.from(data);
   }
@@ -165,10 +188,15 @@ Future<dynamic> _request(Future<Response> Function() call) async {
 
   // ── Tables ───────────────────────────────────────────────────────────
   Future<List<dynamic>> getTables({String? search, String? status}) async {
-    final data = await _request(() => _dio.get('/tables', queryParameters: {
+    final data = await _request(
+      () => _dio.get(
+        '/tables',
+        queryParameters: {
           if (search != null && search.isNotEmpty) 'search': search,
           if (status != null) 'status': status,
-        }));
+        },
+      ),
+    );
     return List<dynamic>.from(data);
   }
 
@@ -178,17 +206,27 @@ Future<dynamic> _request(Future<Response> Function() call) async {
   }
 
   Future<Map<String, dynamic>> createTable(String tableId, int seats) async {
-    final data = await _request(() => _dio.post('/tables', data: {'tableId': tableId, 'seats': seats}));
+    final data = await _request(
+      () => _dio.post('/tables', data: {'tableId': tableId, 'seats': seats}),
+    );
     return Map<String, dynamic>.from(data);
   }
 
-  Future<Map<String, dynamic>> updateTable(String id, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateTable(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
     final data = await _request(() => _dio.put('/tables/$id', data: payload));
     return Map<String, dynamic>.from(data);
   }
 
-  Future<Map<String, dynamic>> updateTableStatus(String id, String status) async {
-    final data = await _request(() => _dio.patch('/tables/$id/status', data: {'status': status}));
+  Future<Map<String, dynamic>> updateTableStatus(
+    String id,
+    String status,
+  ) async {
+    final data = await _request(
+      () => _dio.patch('/tables/$id/status', data: {'status': status}),
+    );
     return Map<String, dynamic>.from(data);
   }
 
@@ -199,37 +237,65 @@ Future<dynamic> _request(Future<Response> Function() call) async {
   // ── Bills ────────────────────────────────────────────────────────────
   /// Direct/counter bill built straight from products — no table involved.
   Future<Map<String, dynamic>> createDirectBill({
-    required List<Map<String, dynamic>> items, // [{productId, qty}] or [{name, qty, rate}]
+    required List<Map<String, dynamic>>
+    items, // [{productId, qty}] or [{name, qty, rate}]
     String? customerName,
     double taxRate = 5,
     double discount = 0,
   }) async {
-    final data = await _request(() => _dio.post('/bills', data: {
+    final data = await _request(
+      () => _dio.post(
+        '/bills',
+        data: {
           'items': items,
           if (customerName != null) 'customerName': customerName,
           'taxRate': taxRate,
           'discount': discount,
-        }));
+        },
+      ),
+    );
     return Map<String, dynamic>.from(data);
   }
 
   /// Bill generated from a restaurant table's current order.
-  Future<Map<String, dynamic>> generateTableBill(String tableId, {double taxRate = 5, double discount = 0}) async {
-    final data = await _request(() => _dio.post('/bills/generate/$tableId', data: {
-          'taxRate': taxRate,
-          'discount': discount,
-        }));
+  Future<Map<String, dynamic>> generateTableBill(
+    String tableId, {
+    double taxRate = 5,
+    double discount = 0,
+  }) async {
+    final data = await _request(
+      () => _dio.post(
+        '/bills/generate/$tableId',
+        data: {'taxRate': taxRate, 'discount': discount},
+      ),
+    );
     return Map<String, dynamic>.from(data);
   }
 
-  Future<List<dynamic>> getBills({String? status, String? tableId, DateTime? from, DateTime? to}) async {
-    final data = await _request(() => _dio.get('/bills', queryParameters: {
+  /// Returns the raw bill list plus server-computed totalRevenue/count.
+  Future<Map<String, dynamic>> getBills({
+    String? status,
+    String? tableId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final body = await _request(
+      () => _dio.get(
+        '/bills',
+        queryParameters: {
           if (status != null) 'status': status,
           if (tableId != null) 'tableId': tableId,
           if (from != null) 'from': from.toIso8601String(),
           if (to != null) 'to': to.toIso8601String(),
-        }));
-    return List<dynamic>.from(data);
+        },
+      ),
+      fullResponse: true,
+    );
+    return Map<String, dynamic>.from(body);
+  }
+
+  Future<void> deleteBill(String id) async {
+    await _request(() => _dio.delete('/bills/$id'));
   }
 
   Future<Map<String, dynamic>> getBillById(String id) async {
@@ -238,7 +304,10 @@ Future<dynamic> _request(Future<Response> Function() call) async {
   }
 
   Future<Map<String, dynamic>> payBill(String id, String paymentMethod) async {
-    final data = await _request(() => _dio.patch('/bills/$id/pay', data: {'paymentMethod': paymentMethod}));
+    final data = await _request(
+      () =>
+          _dio.patch('/bills/$id/pay', data: {'paymentMethod': paymentMethod}),
+    );
     return Map<String, dynamic>.from(data);
   }
 

@@ -16,20 +16,22 @@ class BillItem {
   });
 
   factory BillItem.fromJson(Map<String, dynamic> json) => BillItem(
-        productId: json['product'] as String?,
-        name: json['name'] as String,
-        qty: (json['qty'] as num).toDouble(),
-        rate: (json['rate'] as num).toDouble(),
-        total: (json['total'] as num).toDouble(),
-      );
+    productId: json['product'] as String?,
+    name: json['name'] as String,
+    qty: (json['qty'] as num).toDouble(),
+    rate: (json['rate'] as num).toDouble(),
+    total: (json['total'] as num).toDouble(),
+  );
 }
 
 enum BillStatus { unpaid, paid, cancelled, pending, overdue }
 
 BillStatus _statusFromString(String s) => BillStatus.values.firstWhere(
-      (e) => e.name == s,
-      orElse: () => BillStatus.unpaid,
-    );
+  (e) =>
+      e.name ==
+      s.trim().toLowerCase(), // guards against case/whitespace mismatches
+  orElse: () => BillStatus.unpaid, // ← change back from BillStatus.paid
+);
 
 class Bill {
   final String id;
@@ -69,25 +71,27 @@ class Bill {
   });
 
   factory Bill.fromJson(Map<String, dynamic> json) => Bill(
-        id: json['_id'] as String,
-        billNumber: json['billNumber'] as String,
-        source: json['source'] as String? ?? 'direct',
-        tableId: json['tableId'] as String?,
-        customerName: json['customerName'] as String?,
-        waiter: json['waiter'] as String?,
-        items: (json['items'] as List)
-            .map((e) => BillItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        subtotal: (json['subtotal'] as num).toDouble(),
-        taxRate: (json['taxRate'] as num).toDouble(),
-        taxAmount: (json['taxAmount'] as num).toDouble(),
-        discount: (json['discount'] as num).toDouble(),
-        grandTotal: (json['grandTotal'] as num).toDouble(),
-        paymentMethod: json['paymentMethod'] as String? ?? 'pending',
-        status: _statusFromString(json['status'] as String? ?? 'unpaid'),
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        paidAt: json['paidAt'] != null ? DateTime.parse(json['paidAt'] as String) : null,
-      );
+    id: json['_id'] as String,
+    billNumber: json['billNumber'] as String,
+    source: json['source'] as String? ?? 'direct',
+    tableId: json['tableId'] as String?,
+    customerName: json['customerName'] as String?,
+    waiter: json['waiter'] as String?,
+    items: (json['items'] as List)
+        .map((e) => BillItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    subtotal: (json['subtotal'] as num).toDouble(),
+    taxRate: (json['taxRate'] as num).toDouble(),
+    taxAmount: (json['taxAmount'] as num).toDouble(),
+    discount: (json['discount'] as num).toDouble(),
+    grandTotal: (json['grandTotal'] as num).toDouble(),
+    paymentMethod: json['paymentMethod'] as String? ?? 'pending',
+    status: _statusFromString(json['status'] as String? ?? 'unpaid'),
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    paidAt: json['paidAt'] != null
+        ? DateTime.parse(json['paidAt'] as String)
+        : null,
+  );
 }
 
 /// A line in the in-memory cart, before checkout turns it into a BillItem.

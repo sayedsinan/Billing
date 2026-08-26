@@ -96,23 +96,36 @@ class _ProductsPageState extends State<ProductsPage> {
                         onChanged: (v) => setState(() => _search = v),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    _chip(
-                      'All',
-                      _filterCat == null,
-                      () => setState(() => _filterCat = null),
-                    ),
-                    ...cats.map(
-                      (c) => Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: _chip(
-                          c,
-                          _filterCat == c,
-                          () => setState(() => _filterCat = c),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
+                       const SizedBox(width: 12),
+    // Chips scroll horizontally instead of overflowing when there
+    // are many categories.
+    Expanded(
+      flex: 4,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _chip(
+              'All',
+              _filterCat == null,
+              () => setState(() => _filterCat = null),
+            ),
+            ...cats.map(
+              (c) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: _chip(
+                  c,
+                  _filterCat == c,
+                  () => setState(() => _filterCat = c),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+    const SizedBox(width: 12),
+    if (loading) const Spacer(),
                     if (loading)
                       const SizedBox(
                         width: 16,

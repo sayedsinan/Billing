@@ -18,7 +18,16 @@ class DashboardContent extends StatefulWidget {
 class _DashboardContentState extends State<DashboardContent> {
   late final BillController _billController;
 
-  static const _weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static const _weekdayLabels = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+  bool _manualRefreshing = false;
 
   _DashRange _range = _DashRange.today;
 
@@ -31,12 +40,23 @@ class _DashboardContentState extends State<DashboardContent> {
     }
   }
 
+  Future<void> _refresh() async {
+    if (_manualRefreshing) return;
+    setState(() => _manualRefreshing = true);
+    try {
+      await _billController.fetchBills();
+    } finally {
+      if (mounted) setState(() => _manualRefreshing = false);
+    }
+  }
+
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  DateTime _startOfWeek(DateTime d) => _startOfDay(d.subtract(Duration(days: d.weekday - 1)));
+  DateTime _startOfWeek(DateTime d) =>
+      _startOfDay(d.subtract(Duration(days: d.weekday - 1)));
 
   DateTime _startOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
 
@@ -70,7 +90,11 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   List<Bill> _billsInRange(List<Bill> bills, DateTime start, DateTime end) =>
-      bills.where((b) => !b.createdAt.isBefore(start) && b.createdAt.isBefore(end)).toList();
+      bills
+          .where(
+            (b) => !b.createdAt.isBefore(start) && b.createdAt.isBefore(end),
+          )
+          .toList();
 
   String _rangeLabel(_DashRange range) {
     switch (range) {
@@ -111,7 +135,9 @@ class _DashboardContentState extends State<DashboardContent> {
     final now = DateTime.now();
     return List.generate(days, (i) {
       final day = now.subtract(Duration(days: days - 1 - i));
-      return bills.where((b) => _isSameDay(b.createdAt, day)).fold(0.0, (s, b) => s + b.grandTotal);
+      return bills
+          .where((b) => _isSameDay(b.createdAt, day))
+          .fold(0.0, (s, b) => s + b.grandTotal);
     });
   }
 
@@ -123,7 +149,8 @@ class _DashboardContentState extends State<DashboardContent> {
         qtyByName[item.name] = (qtyByName[item.name] ?? 0) + item.qty;
       }
     }
-    final sorted = qtyByName.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final sorted = qtyByName.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return sorted.take(limit).toList();
   }
 
@@ -158,12 +185,18 @@ class _DashboardContentState extends State<DashboardContent> {
           ? (rangeSales > 0 ? 100.0 : 0.0)
           : ((rangeSales - prevSales) / prevSales) * 100;
 
-      final avgBillValue = rangeBills.isEmpty ? 0.0 : rangeSales / rangeBills.length;
+      final avgBillValue = rangeBills.isEmpty
+          ? 0.0
+          : rangeSales / rangeBills.length;
 
       // NOTE: assumes BillStatus has members literally named `pending` and
       // `overdue`. If your enum uses different names, change these two.
-      final pendingBills = rangeBills.where((b) => b.status == BillStatus.pending).toList();
-      final overdueBills = rangeBills.where((b) => b.status == BillStatus.overdue).toList();
+      final pendingBills = rangeBills
+          .where((b) => b.status == BillStatus.pending)
+          .toList();
+      final overdueBills = rangeBills
+          .where((b) => b.status == BillStatus.overdue)
+          .toList();
       final pendingAmount = pendingBills.fold(0.0, (s, b) => s + b.grandTotal);
       final overdueAmount = overdueBills.fold(0.0, (s, b) => s + b.grandTotal);
 
@@ -176,7 +209,11 @@ class _DashboardContentState extends State<DashboardContent> {
       final topItems = _topItems(rangeBills);
       final topItemsMaxQty = topItems.isEmpty ? 1.0 : topItems.first.value;
 
-      final recentBills = (rangeBills.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt))).take(8).toList();
+      final recentBills =
+          (rangeBills.toList()
+                ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+              .take(8)
+              .toList();
 
       return SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -186,17 +223,68 @@ class _DashboardContentState extends State<DashboardContent> {
             // ── Range filter ────────────────────────────────────────────
             Row(
               children: [
-                Text(_rangeLabel(_range), style: const TextStyle(color: kTextDark, fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(
+                  _rangeLabel(_range),
+                  style: const TextStyle(
+                    color: kTextDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // ── Manual refresh button ───────────────────────────
+                _manualRefreshing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: kBlue,
+                        ),
+                      )
+                    : InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: _refresh,
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.refresh_rounded,
+                            size: 18,
+                            color: kBlue,
+                          ),
+                        ),
+                      ),
                 const Spacer(),
-                _RangeChip('Today', _range == _DashRange.today, () => setState(() => _range = _DashRange.today)),
+                _RangeChip(
+                  'Today',
+                  _range == _DashRange.today,
+                  () => setState(() => _range = _DashRange.today),
+                ),
+
                 const SizedBox(width: 6),
-                _RangeChip('Yesterday', _range == _DashRange.yesterday, () => setState(() => _range = _DashRange.yesterday)),
+                _RangeChip(
+                  'Yesterday',
+                  _range == _DashRange.yesterday,
+                  () => setState(() => _range = _DashRange.yesterday),
+                ),
                 const SizedBox(width: 6),
-                _RangeChip('This Week', _range == _DashRange.week, () => setState(() => _range = _DashRange.week)),
+                _RangeChip(
+                  'This Week',
+                  _range == _DashRange.week,
+                  () => setState(() => _range = _DashRange.week),
+                ),
                 const SizedBox(width: 6),
-                _RangeChip('This Month', _range == _DashRange.month, () => setState(() => _range = _DashRange.month)),
+                _RangeChip(
+                  'This Month',
+                  _range == _DashRange.month,
+                  () => setState(() => _range = _DashRange.month),
+                ),
                 const SizedBox(width: 6),
-                _RangeChip('All Time', _range == _DashRange.all, () => setState(() => _range = _DashRange.all)),
+                _RangeChip(
+                  'All Time',
+                  _range == _DashRange.all,
+                  () => setState(() => _range = _DashRange.all),
+                ),
               ],
             ),
 
@@ -233,8 +321,10 @@ class _DashboardContentState extends State<DashboardContent> {
                 const SizedBox(width: 16),
                 _StatTile(
                   label: 'Outstanding',
-                  value: '₹${(pendingAmount + overdueAmount).toStringAsFixed(0)}',
-                  sub: '${pendingBills.length + overdueBills.length} unpaid bills',
+                  value:
+                      '₹${(pendingAmount + overdueAmount).toStringAsFixed(0)}',
+                  sub:
+                      '${pendingBills.length + overdueBills.length} unpaid bills',
                   icon: Icons.error_outline_rounded,
                   color: kOrange,
                 ),
@@ -250,12 +340,25 @@ class _DashboardContentState extends State<DashboardContent> {
               decoration: BoxDecoration(
                 color: kWhite,
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sales — Last 7 Days', style: TextStyle(color: kTextDark, fontSize: 14, fontWeight: FontWeight.w700)),
+                  const Text(
+                    'Sales — Last 7 Days',
+                    style: TextStyle(
+                      color: kTextDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   SizedBox(
                     height: 110,
@@ -264,7 +367,9 @@ class _DashboardContentState extends State<DashboardContent> {
                       children: List.generate(7, (i) {
                         final day = now.subtract(Duration(days: 6 - i));
                         final value = daily[i];
-                        final height = dailyMax == 0 ? 4.0 : (value / dailyMax) * 78 + 4;
+                        final height = dailyMax == 0
+                            ? 4.0
+                            : (value / dailyMax) * 78 + 4;
                         final isToday = _isSameDay(day, now);
                         return Expanded(
                           child: Padding(
@@ -273,14 +378,22 @@ class _DashboardContentState extends State<DashboardContent> {
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 if (value > 0)
-                                  Text('₹${value.toStringAsFixed(0)}',
-                                      style: TextStyle(fontSize: 9, color: isToday ? kBlue : kTextGray, fontWeight: FontWeight.w600)),
+                                  Text(
+                                    '₹${value.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: isToday ? kBlue : kTextGray,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 const SizedBox(height: 4),
                                 AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
                                   height: height,
                                   decoration: BoxDecoration(
-                                    color: isToday ? kBlue : kBlue.withOpacity(0.25),
+                                    color: isToday
+                                        ? kBlue
+                                        : kBlue.withOpacity(0.25),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                 ),
@@ -290,7 +403,9 @@ class _DashboardContentState extends State<DashboardContent> {
                                   style: TextStyle(
                                     color: isToday ? kBlue : kTextGray,
                                     fontSize: 10,
-                                    fontWeight: isToday ? FontWeight.w700 : FontWeight.normal,
+                                    fontWeight: isToday
+                                        ? FontWeight.w700
+                                        : FontWeight.normal,
                                   ),
                                 ),
                               ],
@@ -318,16 +433,25 @@ class _DashboardContentState extends State<DashboardContent> {
                     child: recentBills.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('No bills in this period', style: TextStyle(color: kTextGray))),
+                            child: Center(
+                              child: Text(
+                                'No bills in this period',
+                                style: TextStyle(color: kTextGray),
+                              ),
+                            ),
                           )
                         : Column(
                             children: recentBills
-                                .map((b) => BillRow(
-                                      '#${b.billNumber}',
-                                      b.customerName?.trim().isNotEmpty == true ? b.customerName! : 'Walk-in Customer',
-                                      '₹${b.grandTotal.toStringAsFixed(0)}',
-                                      // _statusLabel(b.status),
-                                    ))
+                                .map(
+                                  (b) => BillRow(
+                                    '#${b.billNumber}',
+                                    b.customerName?.trim().isNotEmpty == true
+                                        ? b.customerName!
+                                        : 'Walk-in Customer',
+                                    '₹${b.grandTotal.toStringAsFixed(0)}',
+                                    // _statusLabel(b.status),
+                                  ),
+                                )
                                 .toList(),
                           ),
                   ),
@@ -342,21 +466,39 @@ class _DashboardContentState extends State<DashboardContent> {
                     decoration: BoxDecoration(
                       color: kWhite,
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x0D000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Top Selling · ${_rangeLabel(_range)}', style: const TextStyle(color: kTextDark, fontSize: 14, fontWeight: FontWeight.w700)),
+                        Text(
+                          'Top Selling · ${_rangeLabel(_range)}',
+                          style: const TextStyle(
+                            color: kTextDark,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         if (topItems.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Text('No item data in this period', style: TextStyle(color: kTextGray, fontSize: 12)),
+                            child: Text(
+                              'No item data in this period',
+                              style: TextStyle(color: kTextGray, fontSize: 12),
+                            ),
                           )
                         else
                           ...topItems.map((e) {
-                            final qty = e.value == e.value.toInt() ? e.value.toInt().toString() : e.value.toStringAsFixed(1);
+                            final qty = e.value == e.value.toInt()
+                                ? e.value.toInt().toString()
+                                : e.value.toStringAsFixed(1);
                             final ratio = e.value / topItemsMaxQty;
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -366,11 +508,25 @@ class _DashboardContentState extends State<DashboardContent> {
                                   Row(
                                     children: [
                                       Expanded(
-                                        child: Text(e.key,
-                                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(color: kTextDark, fontSize: 12, fontWeight: FontWeight.w600)),
+                                        child: Text(
+                                          e.key,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: kTextDark,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
-                                      Text('$qty sold', style: const TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600)),
+                                      Text(
+                                        '$qty sold',
+                                        style: const TextStyle(
+                                          color: kTextGray,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
@@ -380,7 +536,9 @@ class _DashboardContentState extends State<DashboardContent> {
                                       value: ratio,
                                       minHeight: 6,
                                       backgroundColor: kBgGray,
-                                      valueColor: const AlwaysStoppedAnimation(kBlue),
+                                      valueColor: const AlwaysStoppedAnimation(
+                                        kBlue,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -418,9 +576,24 @@ class _RangeChip extends StatelessWidget {
           color: active ? kBlue.withOpacity(0.12) : kWhite,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: active ? kBlue : kBgGray),
-          boxShadow: active ? null : const [BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 1))],
+          boxShadow: active
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 1),
+                  ),
+                ],
         ),
-        child: Text(label, style: TextStyle(color: active ? kBlue : kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? kBlue : kTextGray,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -431,7 +604,13 @@ class _StatTile extends StatelessWidget {
   final String label, value, sub;
   final IconData icon;
   final Color color;
-  const _StatTile({required this.label, required this.value, required this.sub, required this.icon, required this.color});
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -441,13 +620,23 @@ class _StatTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: kWhite,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0D000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Icon(icon, color: color, size: 22),
             ),
             const SizedBox(width: 12),
@@ -455,11 +644,26 @@ class _StatTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(color: kTextGray, fontSize: 11)),
+                  Text(
+                    label,
+                    style: const TextStyle(color: kTextGray, fontSize: 11),
+                  ),
                   const SizedBox(height: 3),
-                  Text(value, style: const TextStyle(color: kTextDark, fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: kTextDark,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(sub, style: TextStyle(color: color, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    sub,
+                    style: TextStyle(color: color, fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -483,10 +687,19 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Icon(Icons.receipt_long_outlined, color: kTextGray, size: 56),
           const SizedBox(height: 16),
-          const Text('No bills yet', style: TextStyle(color: kTextDark, fontSize: 16, fontWeight: FontWeight.w700)),
+          const Text(
+            'No bills yet',
+            style: TextStyle(
+              color: kTextDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
-          const Text('Once you create some bills, your dashboard will fill up here.',
-              style: TextStyle(color: kTextGray, fontSize: 13)),
+          const Text(
+            'Once you create some bills, your dashboard will fill up here.',
+            style: TextStyle(color: kTextGray, fontSize: 13),
+          ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: onRefresh,

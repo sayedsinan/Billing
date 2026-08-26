@@ -263,42 +263,53 @@ class _TableOrderPageState extends State<TableOrderPage> {
       builder: (_) => TableOrderDialog(table: table, controller: controller),
     );
   }
+Future<void> _printTableBill(BuildContext ctx, DiningTable table) async {
+  try {
+    debugPrint('🖨️ [KOT] Fetching latest bill for table ${table.tableId} (id: ${table.id})');
+    final result = await ApiService.instance.getBills(tableId: table.id);
+    final data = (result['data'] as List<dynamic>? ?? []);
+    debugPrint('🖨️ [KOT] Bills found: ${data.length}');
 
-  /// Fetches this table's most recent bill and sends it straight to the
-  /// printer — no dialog needed. Used by the print icon on each table card.
-  Future<void> _printTableBill(BuildContext ctx, DiningTable table) async {
-    try {
-      final data = await ApiService.instance.getBills(tableId: table.id);
-      if (data.isEmpty) {
-        if (ctx.mounted) {
-          ScaffoldMessenger.of(ctx).showSnackBar(
-            const SnackBar(content: Text('No bill found for this table yet. Generate one first.')),
-          );
-        }
-        return;
-      }
-      final bills = data.map((e) => Bill.fromJson(e as Map<String, dynamic>)).toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      final latest = bills.first;
-
-      await PrintService.instance.printBillWithKOT(latest);
-
+    if (data.isEmpty) {
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(content: Text('Bill #${latest.billNumber} sent to printer'), backgroundColor: kGreen),
+          const SnackBar(content: Text('No bill found for this table yet. Generate one first.')),
         );
       }
-    } on ApiException catch (e) {
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
-      }
-    } on PrintException catch (e) {
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
-      }
+      return;
+    }
+    final bills = data.map((e) => Bill.fromJson(e as Map<String, dynamic>)).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final latest = bills.first;
+
+    debugPrint('🖨️ [KOT] Printing bill #${latest.billNumber} (id: ${latest.id}), ${latest.items.length} items');
+    await PrintService.instance.printBillWithKOT(latest);
+    debugPrint('🖨️ [KOT] printBillWithKOT completed OK for bill #${latest.billNumber}');
+
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text('Bill #${latest.billNumber} sent to printer'), backgroundColor: kGreen),
+      );
+    }
+  } on ApiException catch (e) {
+    debugPrint('🖨️ [KOT] ApiException: ${e.message}');
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+    }
+  } on PrintException catch (e) {
+    debugPrint('🖨️ [KOT] PrintException: ${e.message}');
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+    }
+  } catch (e, st) {
+    // Catch-all so a printer/driver error doesn't fail silently.
+    debugPrint('🖨️ [KOT] Unexpected error: $e\n$st');
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Print failed: $e'), backgroundColor: kRed));
     }
   }
-  void _confirmDelete(BuildContext ctx, TableController controller, DiningTable table) {
+}
+void _confirmDelete(BuildContext ctx, TableController controller, DiningTable table) {
     showDialog(
       context: ctx,
       builder: (dialogCtx) => AlertDialog(
@@ -618,27 +629,35 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
     // Auto-print right away; the Print Bill button lets them reprint if needed.
     await _printBill(bill);
   }
-
-  Future<void> _printBill(Bill bill) async {
-    setState(() => _printing = true);
-    try {
-      await PrintService.instance.printBill(bill);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
-        );
-      }
-    } on PrintException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: kRed),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _printing = false);
+Future<void> _printBill(Bill bill) async {
+  setState(() => _printing = true);
+  debugPrint('🖨️ [TableDialog] Starting print for bill #${bill.billNumber}');
+  try {
+    await PrintService.instance.printBill(bill);
+    debugPrint('🖨️ [TableDialog] printBill() completed OK for #${bill.billNumber}');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
+      );
     }
+  } on PrintException catch (e) {
+    debugPrint('🖨️ [TableDialog] PrintException: ${e.message}');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: kRed),
+      );
+    }
+  } catch (e, st) {
+    debugPrint('🖨️ [TableDialog] Unexpected print error: $e\n$st');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Print failed: $e'), backgroundColor: kRed),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _printing = false);
   }
-
+}
   /// Resets the dialog back to a blank order for this table so the next
   /// customer can be served immediately, without closing and reopening it.
   /// (Previously this just called Navigator.pop, which closed the dialog
