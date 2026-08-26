@@ -54,7 +54,11 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
     setState(() {
       final idx = _items.indexWhere((i) => i.name == p.name);
       if (idx >= 0) {
-        _items[idx] = OrderItem(name: p.name, qty: _items[idx].qty + 1, rate: p.price);
+        _items[idx] = OrderItem(
+          name: p.name,
+          qty: _items[idx].qty + 1,
+          rate: p.price,
+        );
       } else {
         _items.add(OrderItem(name: p.name, qty: 1, rate: p.price));
       }
@@ -87,10 +91,15 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   }
 
   Future<void> _generateAndPrint() async {
-    final validItems = _items.where((i) => i.name.trim().isNotEmpty && i.qty > 0).toList();
+    final validItems = _items
+        .where((i) => i.name.trim().isNotEmpty && i.qty > 0)
+        .toList();
     if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one item'), backgroundColor: kRed),
+        const SnackBar(
+          content: Text('Add at least one item'),
+          backgroundColor: kRed,
+        ),
       );
       return;
     }
@@ -101,7 +110,9 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
         items: validItems
             .map((i) => {'name': i.name, 'qty': i.qty, 'rate': i.rate})
             .toList(),
-        customerName: _customerNameCtrl.text.trim().isEmpty ? null : _customerNameCtrl.text.trim(),
+        customerName: _customerNameCtrl.text.trim().isEmpty
+            ? null
+            : _customerNameCtrl.text.trim(),
       );
       final bill = Bill.fromJson(data);
       setState(() {
@@ -111,24 +122,35 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bill generated · Total ₹${bill.grandTotal.toStringAsFixed(2)}'), backgroundColor: kGreen),
+        SnackBar(
+          content: Text(
+            'Bill generated · Total ₹${bill.grandTotal.toStringAsFixed(2)}',
+          ),
+          backgroundColor: kGreen,
+        ),
       );
 
       await _printBill(bill);
     } on ApiException catch (e) {
       setState(() => _generating = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: kRed),
+        );
       }
     }
   }
+
   Future<void> _printBill(Bill bill) async {
     setState(() => _printing = true);
     try {
       await PrintService.instance.printBillWithKOT(bill);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
+          const SnackBar(
+            content: Text('Sent to printer'),
+            backgroundColor: kGreen,
+          ),
         );
       }
     } on PrintException catch (e) {
@@ -155,14 +177,28 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
             // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: const BoxDecoration(color: kOrange, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+              decoration: const BoxDecoration(
+                color: kOrange,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
               child: Row(
                 children: [
                   const Icon(Icons.shopping_bag_rounded, color: kWhite),
                   const SizedBox(width: 10),
-                  const Text('Takeout Bill', style: TextStyle(color: kWhite, fontWeight: FontWeight.w700, fontSize: 16)),
+                  const Text(
+                    'Takeout Bill',
+                    style: TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
                   const Spacer(),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, color: kWhite), padding: EdgeInsets.zero),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, color: kWhite),
+                    padding: EdgeInsets.zero,
+                  ),
                 ],
               ),
             ),
@@ -174,35 +210,72 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Customer Name (optional)', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Customer Name (optional)',
+                      style: TextStyle(
+                        color: kTextGray,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _customerNameCtrl,
                       decoration: InputDecoration(
                         hintText: 'e.g. Walk-in / Ravi',
-                        hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                        hintStyle: const TextStyle(
+                          color: kTextGray,
+                          fontSize: 13,
+                        ),
                         filled: true,
                         fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    const Text('Order Items', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
+                    const Text(
+                      'Order Items',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: kTextDark,
+                        fontSize: 14,
+                      ),
+                    ),
                     const SizedBox(height: 8),
 
                     // ── Optional search to narrow the block grid below ──
                     TextField(
                       controller: _productSearchCtrl,
                       decoration: InputDecoration(
-                        hintText: 'Search products (optional) — or just tap a block below...',
-                        hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
+                        hintText:
+                            'Search products (optional) — or just tap a block below...',
+                        hintStyle: const TextStyle(
+                          color: kTextGray,
+                          fontSize: 13,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: kTextGray,
+                          size: 18,
+                        ),
                         filled: true,
                         fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                       onChanged: (v) => setState(() => _productQuery = v),
                     ),
@@ -214,12 +287,17 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                       final q = _productQuery.toLowerCase();
                       final matches = q.isEmpty
                           ? products
-                          : products.where((p) => p.name.toLowerCase().contains(q)).toList();
+                          : products
+                                .where((p) => p.name.toLowerCase().contains(q))
+                                .toList();
 
-                      if (_productController.isLoading.value && products.isEmpty) {
+                      if (_productController.isLoading.value &&
+                          products.isEmpty) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator(color: kOrange)),
+                          child: Center(
+                            child: CircularProgressIndicator(color: kOrange),
+                          ),
                         );
                       }
 
@@ -227,8 +305,13 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Text(
-                            products.isEmpty ? 'No products in catalog yet' : 'No products match "$_productQuery"',
-                            style: const TextStyle(color: kTextGray, fontSize: 12),
+                            products.isEmpty
+                                ? 'No products in catalog yet'
+                                : 'No products match "$_productQuery"',
+                            style: const TextStyle(
+                              color: kTextGray,
+                              fontSize: 12,
+                            ),
                           ),
                         );
                       }
@@ -244,14 +327,19 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                           child: Wrap(
                             spacing: 10,
                             runSpacing: 10,
-                            children: matches.map((p) => _TakeoutProductBlock(
-                              product: p,
-                              qtyInOrder: _items
-                                  .where((i) => i.name == p.name)
-                                  .fold(0.0, (s, i) => s + i.qty),
-                              onTap: () => _addProductToOrder(p),
-                              onDecrease: () => _decreaseProductFromOrder(p),
-                            )).toList(),
+                            children: matches
+                                .map(
+                                  (p) => _TakeoutProductBlock(
+                                    product: p,
+                                    qtyInOrder: _items
+                                        .where((i) => i.name == p.name)
+                                        .fold(0.0, (s, i) => s + i.qty),
+                                    onTap: () => _addProductToOrder(p),
+                                    onDecrease: () =>
+                                        _decreaseProductFromOrder(p),
+                                  ),
+                                )
+                                .toList(),
                           ),
                         ),
                       );
@@ -260,10 +348,21 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
                     Row(
                       children: [
-                        const Text('Bill Lines', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 13)),
+                        const Text(
+                          'Bill Lines',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: kTextDark,
+                            fontSize: 13,
+                          ),
+                        ),
                         const Spacer(),
                         TextButton.icon(
-                          onPressed: () => setState(() => _items.add(OrderItem(name: '', qty: 1, rate: 0))),
+                          onPressed: () => setState(
+                            () => _items.add(
+                              OrderItem(name: '', qty: 1, rate: 0),
+                            ),
+                          ),
                           icon: const Icon(Icons.add_rounded, size: 16),
                           label: const Text('Custom Item'),
                           style: TextButton.styleFrom(foregroundColor: kOrange),
@@ -275,44 +374,112 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                     if (_items.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text('No items ordered yet — tap a product block above to add', style: TextStyle(color: kTextGray, fontSize: 13)),
+                        child: Text(
+                          'No items ordered yet — tap a product block above to add',
+                          style: TextStyle(color: kTextGray, fontSize: 13),
+                        ),
                       )
                     else ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kBgGray,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         child: const Row(
                           children: [
-                            Expanded(flex: 5, child: Text('Item Name', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                            Expanded(
+                              flex: 5,
+                              child: Text(
+                                'Item Name',
+                                style: TextStyle(
+                                  color: kTextGray,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                             SizedBox(width: 8),
-                            SizedBox(width: 70, child: Text('Qty', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                            SizedBox(
+                              width: 70,
+                              child: Text(
+                                'Qty',
+                                style: TextStyle(
+                                  color: kTextGray,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                             SizedBox(width: 8),
-                            SizedBox(width: 90, child: Text('Rate (₹)', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                            SizedBox(
+                              width: 90,
+                              child: Text(
+                                'Rate (₹)',
+                                style: TextStyle(
+                                  color: kTextGray,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                             SizedBox(width: 8),
-                            SizedBox(width: 90, child: Text('Total', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                            SizedBox(
+                              width: 90,
+                              child: Text(
+                                'Total',
+                                style: TextStyle(
+                                  color: kTextGray,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                             SizedBox(width: 32),
                           ],
                         ),
                       ),
                       const SizedBox(height: 6),
-                      ...List.generate(_items.length, (i) => _TakeoutItemRow(
-                        key: ValueKey('takeout_item_$i-${_items[i].name}'),
-                        item: _items[i],
-                        onChanged: (item) => setState(() => _items[i] = item),
-                        onDelete: () => setState(() => _items.removeAt(i)),
-                      )),
+                      ...List.generate(
+                        _items.length,
+                        (i) => _TakeoutItemRow(
+                          key: ValueKey('takeout_item_$i-${_items[i].name}'),
+                          item: _items[i],
+                          onChanged: (item) => setState(() => _items[i] = item),
+                          onDelete: () => setState(() => _items.removeAt(i)),
+                        ),
+                      ),
                     ],
 
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: kLightBlue, borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(
+                        color: kLightBlue,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Order Total', style: TextStyle(color: kTextGray, fontSize: 14, fontWeight: FontWeight.w700)),
-                          Text('₹${_subtotal.toStringAsFixed(2)}',
-                              style: const TextStyle(color: kTextDark, fontSize: 16, fontWeight: FontWeight.w800)),
+                          const Text(
+                            'Order Total',
+                            style: TextStyle(
+                              color: kTextGray,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            '₹${_subtotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: kTextDark,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -321,15 +488,26 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: kGreen.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+                        decoration: BoxDecoration(
+                          color: kGreen.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         child: Row(
                           children: [
-                            const Icon(Icons.check_circle_rounded, color: kGreen, size: 18),
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: kGreen,
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Bill #${_generatedBill!.billNumber} generated. You can print again or start a new one.',
-                                style: const TextStyle(color: kGreen, fontSize: 12, fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  color: kGreen,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -353,28 +531,60 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                         backgroundColor: kOrange,
                         foregroundColor: kWhite,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                       ),
                       onPressed: _generating ? null : _generateAndPrint,
                       icon: _generating
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kWhite))
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: kWhite,
+                              ),
+                            )
                           : const Icon(Icons.receipt_long_rounded, size: 18),
-                      label: const Text('Generate & Print', style: TextStyle(fontWeight: FontWeight.w600)),
+                      label: const Text(
+                        'Generate & Print',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     )
                   else ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: kBlue,
                         side: const BorderSide(color: kBlue),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
-                      onPressed: _printing ? null : () => _printBill(_generatedBill!),
+                      onPressed: _printing
+                          ? null
+                          : _generateAndPrint, // <-- regenerate, not stale _generatedBill
                       icon: _printing
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kBlue))
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: kBlue,
+                              ),
+                            )
                           : const Icon(Icons.print_rounded, size: 18),
-                      label: const Text('Print Again', style: TextStyle(fontWeight: FontWeight.w600)),
+                      label: const Text(
+                        'Print Again',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
@@ -382,17 +592,36 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                         backgroundColor: kOrange,
                         foregroundColor: kWhite,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                       onPressed: _resetForNewOrder,
-                      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                      label: const Text('New Bill', style: TextStyle(fontWeight: FontWeight.w600)),
+                      icon: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'New Bill',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                   const Spacer(),
                   OutlinedButton(
-                    style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Close'),
                   ),
@@ -421,7 +650,9 @@ class _TakeoutProductBlock extends StatelessWidget {
     required this.onDecrease,
   });
 
-  String get _qtyLabel => qtyInOrder == qtyInOrder.toInt() ? '${qtyInOrder.toInt()}' : '$qtyInOrder';
+  String get _qtyLabel => qtyInOrder == qtyInOrder.toInt()
+      ? '${qtyInOrder.toInt()}'
+      : '$qtyInOrder';
 
   @override
   Widget build(BuildContext context) {
@@ -433,8 +664,17 @@ class _TakeoutProductBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: inOrder ? kOrange.withOpacity(0.10) : kWhite,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: inOrder ? kOrange : kBgGray, width: inOrder ? 1.5 : 1),
-        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 2))],
+        border: Border.all(
+          color: inOrder ? kOrange : kBgGray,
+          width: inOrder ? 1.5 : 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: InkWell(
         // Tapping anywhere else on the card (when not yet ordered) still adds it.
@@ -448,24 +688,41 @@ class _TakeoutProductBlock extends StatelessWidget {
               product.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kTextDark),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: kTextDark,
+              ),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('₹${product.price.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 12, color: kDarkBlue, fontWeight: FontWeight.w700)),
+                Text(
+                  '₹${product.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: kDarkBlue,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 if (!inOrder)
                   InkWell(
                     onTap: onTap,
                     borderRadius: BorderRadius.circular(20),
-                    child: const Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
+                    child: const Icon(
+                      Icons.add_circle_rounded,
+                      color: kGreen,
+                      size: 20,
+                    ),
                   )
                 else
                   // ── − qty + control, replaces the plain add icon once ordered ──
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(20)),
+                    decoration: BoxDecoration(
+                      color: kWhite,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -474,20 +731,34 @@ class _TakeoutProductBlock extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                           child: const Padding(
                             padding: EdgeInsets.all(2),
-                            child: Icon(Icons.remove_circle_rounded, color: kRed, size: 20),
+                            child: Icon(
+                              Icons.remove_circle_rounded,
+                              color: kRed,
+                              size: 20,
+                            ),
                           ),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(_qtyLabel,
-                              style: const TextStyle(color: kOrange, fontSize: 12, fontWeight: FontWeight.w800)),
+                          child: Text(
+                            _qtyLabel,
+                            style: const TextStyle(
+                              color: kOrange,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                         InkWell(
                           onTap: onTap,
                           borderRadius: BorderRadius.circular(20),
                           child: const Padding(
                             padding: EdgeInsets.all(2),
-                            child: Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
+                            child: Icon(
+                              Icons.add_circle_rounded,
+                              color: kGreen,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ],
@@ -507,7 +778,12 @@ class _TakeoutItemRow extends StatefulWidget {
   final OrderItem item;
   final Function(OrderItem) onChanged;
   final VoidCallback onDelete;
-  const _TakeoutItemRow({super.key, required this.item, required this.onChanged, required this.onDelete});
+  const _TakeoutItemRow({
+    super.key,
+    required this.item,
+    required this.onChanged,
+    required this.onDelete,
+  });
 
   @override
   State<_TakeoutItemRow> createState() => _TakeoutItemRowState();
@@ -522,8 +798,14 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.item.name);
-    _qtyCtrl = TextEditingController(text: widget.item.qty == widget.item.qty.toInt() ? widget.item.qty.toInt().toString() : widget.item.qty.toString());
-    _rateCtrl = TextEditingController(text: widget.item.rate == 0 ? '' : widget.item.rate.toStringAsFixed(0));
+    _qtyCtrl = TextEditingController(
+      text: widget.item.qty == widget.item.qty.toInt()
+          ? widget.item.qty.toInt().toString()
+          : widget.item.qty.toString(),
+    );
+    _rateCtrl = TextEditingController(
+      text: widget.item.rate == 0 ? '' : widget.item.rate.toStringAsFixed(0),
+    );
   }
 
   @override
@@ -537,7 +819,9 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
           : widget.item.qty.toString();
       if (_nameCtrl.text != widget.item.name) _nameCtrl.text = widget.item.name;
       if (_qtyCtrl.text != newQty) _qtyCtrl.text = newQty;
-      final newRate = widget.item.rate == 0 ? '' : widget.item.rate.toStringAsFixed(0);
+      final newRate = widget.item.rate == 0
+          ? ''
+          : widget.item.rate.toStringAsFixed(0);
       if (_rateCtrl.text != newRate) _rateCtrl.text = newRate;
     }
   }
@@ -551,34 +835,50 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
   }
 
   void _notify() {
-    widget.onChanged(OrderItem(
-      name: _nameCtrl.text,
-      qty: double.tryParse(_qtyCtrl.text) ?? 1,
-      rate: double.tryParse(_rateCtrl.text) ?? 0,
-    ));
+    widget.onChanged(
+      OrderItem(
+        name: _nameCtrl.text,
+        qty: double.tryParse(_qtyCtrl.text) ?? 1,
+        rate: double.tryParse(_rateCtrl.text) ?? 0,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = (double.tryParse(_qtyCtrl.text) ?? 0) * (double.tryParse(_rateCtrl.text) ?? 0);
+    final total =
+        (double.tryParse(_qtyCtrl.text) ?? 0) *
+        (double.tryParse(_rateCtrl.text) ?? 0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           Expanded(
             flex: 5,
-            child: TextField(controller: _nameCtrl, onChanged: (_) => _notify(), decoration: _inputDec('Item name'), style: const TextStyle(fontSize: 13)),
+            child: TextField(
+              controller: _nameCtrl,
+              onChanged: (_) => _notify(),
+              decoration: _inputDec('Item name'),
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
           const SizedBox(width: 8),
           SizedBox(
             width: 70,
             child: TextField(
               controller: _qtyCtrl,
-              onChanged: (_) { _notify(); setState(() {}); },
+              onChanged: (_) {
+                _notify();
+                setState(() {});
+              },
               decoration: _inputDec('1'),
               style: const TextStyle(fontSize: 13),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -586,11 +886,18 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
             width: 90,
             child: TextField(
               controller: _rateCtrl,
-              onChanged: (_) { _notify(); setState(() {}); },
+              onChanged: (_) {
+                _notify();
+                setState(() {});
+              },
               decoration: _inputDec('0.00'),
               style: const TextStyle(fontSize: 13),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -598,8 +905,18 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
             width: 90,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(color: kLightBlue, borderRadius: BorderRadius.circular(10)),
-              child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(color: kDarkBlue, fontWeight: FontWeight.w700, fontSize: 13)),
+              decoration: BoxDecoration(
+                color: kLightBlue,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '₹${total.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  color: kDarkBlue,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -607,7 +924,11 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
             width: 32,
             child: IconButton(
               onPressed: widget.onDelete,
-              icon: const Icon(Icons.remove_circle_rounded, color: kRed, size: 20),
+              icon: const Icon(
+                Icons.remove_circle_rounded,
+                color: kRed,
+                size: 20,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
@@ -623,6 +944,9 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
     filled: true,
     fillColor: kBgGray,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide.none,
+    ),
   );
 }

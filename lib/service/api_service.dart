@@ -61,12 +61,10 @@ class ApiService {
   final GetStorage _box = GetStorage();
   static const _tokenKey = 'auth_token';
 
-  // ── Configure this for your environment ──────────────────────────────
-  // Android emulator -> host machine: http://10.0.2.2:3000/api
-  // iOS simulator / desktop / web (localhost server): http://localhost:3000/api
-  // Physical device: http://<your-computer-LAN-ip>:3000/api
-  // Production: https://your-domain.com/api
-  static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
+//Production
+  // static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
+  //Development
+  static const String baseUrl = 'http://localhost:3000/api';
 
   // ── Token management ──────────────────────────────────────────────────
   String? get token => _box.read<String>(_tokenKey);

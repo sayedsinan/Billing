@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:windows_printer/windows_printer.dart';
 
@@ -28,7 +29,8 @@ class PrintService {
   static const String shopName = 'Grillo';
   static const String shopAddress = ''; // e.g. '123 Main Street'
   static const String footerLine = 'Thank you, visit again!';
-
+  // ── Rounds a price for display — 29.99 -> 30 ──
+  String _money(double amount) => amount.round().toString();
   // ── Printer selection ──────────────────────────────────────────────
   Future<List<String>> getAvailablePrinters() =>
       WindowsPrinter.getAvailablePrinters();
@@ -86,7 +88,6 @@ class PrintService {
     const totalStyle = WPTextStyle(
       bold: false,
       align: WPTextAlign.center,
-
       size: WPTextSize.doubleHeight,
     );
 
@@ -117,35 +118,33 @@ class PrintService {
       final qtyLabel = item.qty == item.qty.roundToDouble()
           ? item.qty.toInt().toString()
           : item.qty.toString();
-      builder.item('${item.name} x$qtyLabel', item.total.toStringAsFixed(2));
+      builder.item('${item.name} x$qtyLabel', _money(item.total));
     }
     builder.blank();
 
     builder.separator();
-    builder.item('Subtotal', bill.subtotal.toStringAsFixed(2));
+    builder.item('Subtotal', _money(bill.subtotal));
 
     if (bill.discount > 0) {
-      builder.item('Discount', '-${bill.discount.toStringAsFixed(2)}');
+      builder.item('Discount', '-${_money(bill.discount)}');
     }
 
     final noTaxTotal = bill.subtotal - bill.discount;
 
     builder.separator();
-    builder.line('TOTAL: ${noTaxTotal.toStringAsFixed(2)}', style: totalStyle);
+    builder.line('TOTAL: ${_money(noTaxTotal)}', style: totalStyle);
     builder.item('Payment', bill.paymentMethod);
     builder.separator();
     builder.line(footerLine, style: centerBold);
     builder.line('Please visit again', style: centerItalic);
     builder.blank();
 
-    // Hardware actions — uncomment what your printer supports.
-    // builder.drawer(); // open cash drawer
-    // builder.beep();
     builder.cut();
 
     return Uint8List.fromList(builder.build());
   }
-    /// Sends bill to printer twice: normal customer copy + kitchen copy (no prices).
+
+  /// Sends bill to printer twice: normal customer copy + kitchen copy (no prices).
   Future<void> printBillWithKOT(Bill bill, {String? printerName}) async {
     await printBill(bill, printerName: printerName);
     await printKitchenBill(bill, printerName: printerName);
@@ -169,7 +168,9 @@ class PrintService {
         useRawDatatype: true,
       );
     } catch (e) {
-      throw PrintException('Could not print kitchen bill ${bill.billNumber}: $e');
+      throw PrintException(
+        'Could not print kitchen bill ${bill.billNumber}: $e',
+      );
     }
   }
 
@@ -208,6 +209,28 @@ class PrintService {
     builder.blank();
     builder.separator();
     builder.cut();
+
+    final bytes = Uint8List.fromList(builder.build());
+
+    // ── DEBUG: dump what's being sent to the printer ──
+    debugPrint('===== RECEIPT CONTENT (Bill #${bill.billNumber}) =====');
+    debugPrint('Shop: $shopName');
+    debugPrint('Date: ${_formatDate(bill.createdAt)}');
+    if (bill.tableId?.isNotEmpty ?? false) debugPrint('Table: ${bill.tableId}');
+    if (bill.customerName?.isNotEmpty ?? false)
+      debugPrint('Customer: ${bill.customerName}');
+    for (final item in bill.items) {
+      debugPrint(
+        '  ${item.name} x${item.qty}  =  ${item.total.toStringAsFixed(2)}',
+      );
+    }
+    debugPrint('Subtotal: ${bill.subtotal.toStringAsFixed(2)}');
+    if (bill.discount > 0)
+      debugPrint('Discount: -${bill.discount.toStringAsFixed(2)}');
+    debugPrint('TOTAL: ${(bill.subtotal - bill.discount).toStringAsFixed(2)}');
+    debugPrint('Payment: ${bill.paymentMethod}');
+    debugPrint('Raw bytes length: ${bytes.length}');
+    debugPrint('=======================================');
 
     return Uint8List.fromList(builder.build());
   }
