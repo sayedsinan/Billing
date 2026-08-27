@@ -56,7 +56,6 @@ class PrintService {
   /// default one is used. Throws [PrintException] on failure.
   Future<void> printBill(Bill bill, {String? printerName}) async {
     final target = printerName ?? await resolvePrinter();
-    // final target = printerName ?? await resolvePrinter();
     final printers = await WindowsPrinter.getAvailablePrinters();
 
     for (final printer in printers) {
@@ -138,7 +137,8 @@ class PrintService {
     builder.line(footerLine, style: centerBold);
     builder.line('Please visit again', style: centerItalic);
     builder.blank();
-
+    builder.blank();
+    builder.blank();
     builder.cut();
 
     return Uint8List.fromList(builder.build());
@@ -208,6 +208,9 @@ class PrintService {
 
     builder.blank();
     builder.separator();
+    builder.blank();
+    builder.blank();
+    builder.blank();
     builder.cut();
 
     final bytes = Uint8List.fromList(builder.build());
@@ -232,7 +235,7 @@ class PrintService {
     debugPrint('Raw bytes length: ${bytes.length}');
     debugPrint('=======================================');
 
-    return Uint8List.fromList(builder.build());
+    return bytes;
   }
 
   String _formatDate(DateTime dt) {

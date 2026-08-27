@@ -60,9 +60,9 @@ class ApiService {
   static const _tokenKey = 'auth_token';
 
   //Production
-  // static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
+  static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
   //Development
-  static const String baseUrl = 'http://localhost:3000/api';
+  // static const String baseUrl = 'http://localhost:3000/api';
 
   // ── Token management ──────────────────────────────────────────────────
   String? get token => _box.read<String>(_tokenKey);
@@ -236,7 +236,7 @@ class ApiService {
 
   // ── Bills ────────────────────────────────────────────────────────────
   /// Direct/counter bill built straight from products — no table involved.
-  Future<Map<String, dynamic>> createDirectBill({
+  Future<Map<String, dynamic>>  createDirectBill({
     required List<Map<String, dynamic>>
     items, // [{productId, qty}] or [{name, qty, rate}]
     String? customerName,
