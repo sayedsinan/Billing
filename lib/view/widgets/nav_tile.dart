@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:test_bill/core/constants/colors.dart';
 import 'package:test_bill/models/nav_item.dart';
-import 'package:test_bill/view/attendance/attendance_page.dart';
+import 'package:test_bill/theme/colors.dart';
 
 
 import '../billing/billing_page.dart';
@@ -29,49 +29,60 @@ class NavTile extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: EdgeInsets.symmetric(horizontal: collapsed ? 12 : 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: selected ? AppColors.kSidebarActive.withOpacity(0.2) : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              border: selected
-                  ? Border(left: BorderSide(color:AppColors. kSidebarActive, width: 3))
-                  : const Border(),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  item.icon,
-                  color: selected ? kBlue : AppColors.kSidebarText,
-                  size: 20,
-                ),
-                if (!collapsed) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      item.label,
-                      style: TextStyle(
-                        color: selected ? kWhite : AppColors.kSidebarText,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                        fontSize: 13.5,
+          child: Tooltip(
+            message: collapsed ? item.label : '',
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: EdgeInsets.symmetric(horizontal: collapsed ? 8 : 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.kSidebarActive.withOpacity(0.2) : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: selected
+                    ? const Border(left: BorderSide(color: AppColors.kSidebarActive, width: 3))
+                    : const Border(),
+              ),
+              child: collapsed
+                  ? Center(
+                      child: Icon(
+                        item.icon,
+                        color: selected ? kBlue : AppColors.kSidebarText,
+                        size: 22,
                       ),
+                    )
+                  : Row(
+                      children: [
+                        Icon(
+                          item.icon,
+                          color: selected ? kBlue : AppColors.kSidebarText,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: selected ? kWhite : AppColors.kSidebarText,
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ),
+                        if (item.badge != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: kBlue,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              item.badge!,
+                              style: const TextStyle(color: kWhite, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                  if (item.badge != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: kBlue,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        item.badge!,
-                        style: TextStyle(color: kWhite, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                ],
-              ],
             ),
           ),
         ),

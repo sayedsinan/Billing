@@ -1,89 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:test_bill/controller/employee_controller.dart';
+import 'package:test_bill/models/employee_model.dart';
+import 'package:test_bill/theme/colors.dart';
 
-// ─── Colors (shared palette) ──────────────────────────────────────────────────
-const kBlue = Color(0xFF2196F3);
-const kDarkBlue = Color(0xFF1565C0);
-const kLightBlue = Color(0xFFE3F2FD);
-const kBgGray = Color(0xFFF5F7FA);
-const kWhite = Colors.white;
-const kTextDark = Color(0xFF1A2A3A);
-const kTextGray = Color(0xFF6B7A8D);
-const kGreen = Color(0xFF4CAF50);
-const kOrange = Color(0xFFFF9800);
-const kRed = Color(0xFFF44336);
-const kPurple = Color(0xFF9C27B0);
-const kDivider = Color(0xFFEEF2F7);
-
-// ─── Models ───────────────────────────────────────────────────────────────────
-enum AttStatus { present, absent, halfDay, leave, holiday }
-
-String _dateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-class Employee {
-  final String id;
-  String name;
-  String role;
-  String phone;
-  // dateKey -> record
-  Map<String, AttRecord> records;
-
-  Employee({
-    required this.id,
-    required this.name,
-    required this.role,
-    this.phone = '',
-    Map<String, AttRecord>? records,
-  }) : records = records ?? {};
-
-  AttRecord? recordFor(DateTime d) => records[_dateKey(d)];
-
-  void setRecord(DateTime d, AttRecord r) => records[_dateKey(d)] = r;
-
-  // simple stats for a given month
-  Map<AttStatus, int> monthStats(DateTime month) {
-    final stats = {for (final s in AttStatus.values) s: 0};
-    records.forEach((k, r) {
-      final parts = k.split('-');
-      if (int.parse(parts[0]) == month.year && int.parse(parts[1]) == month.month) {
-        stats[r.status] = (stats[r.status] ?? 0) + 1;
-      }
-    });
-    return stats;
-  }
-}
-
-class AttRecord {
-  AttStatus status;
-  String checkIn;
-  String checkOut;
-  AttRecord({required this.status, this.checkIn = '', this.checkOut = ''});
-}
-
-// ─── Sample Data ──────────────────────────────────────────────────────────────
-List<Employee> _sampleEmployees() {
-  final today = DateTime.now();
-  final yesterday = today.subtract(const Duration(days: 1));
-  final list = [
-    Employee(id: 'E1', name: 'Anil Kumar', role: 'Waiter', phone: '9876543210'),
-    Employee(id: 'E2', name: 'Divya Menon', role: 'Cashier', phone: '8765432109'),
-    Employee(id: 'E3', name: 'Rahul Nair', role: 'Chef', phone: '7654321098'),
-    Employee(id: 'E4', name: 'Meera Thomas', role: 'Waiter', phone: '6543210987'),
-    Employee(id: 'E5', name: 'Suresh Pillai', role: 'Cleaner', phone: '5432109876'),
-    Employee(id: 'E6', name: 'Priya Raj', role: 'Manager', phone: '4321098765'),
-  ];
-  list[0].setRecord(today, AttRecord(status: AttStatus.present, checkIn: '09:02', checkOut: ''));
-  list[1].setRecord(today, AttRecord(status: AttStatus.present, checkIn: '08:55', checkOut: ''));
-  list[2].setRecord(today, AttRecord(status: AttStatus.halfDay, checkIn: '09:10', checkOut: '13:30'));
-  list[3].setRecord(today, AttRecord(status: AttStatus.absent));
-  list[4].setRecord(today, AttRecord(status: AttStatus.leave));
-  list[5].setRecord(today, AttRecord(status: AttStatus.present, checkIn: '08:40', checkOut: ''));
-  for (final e in list) {
-    e.setRecord(yesterday, AttRecord(status: AttStatus.present, checkIn: '09:00', checkOut: '18:00'));
-  }
-  return list;
-}
-
-// ─── Attendance Page ────────────────────────────────────────────────────────────
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
 
@@ -92,380 +12,650 @@ class AttendancePage extends StatefulWidget {
 }
 
 class _AttendancePageState extends State<AttendancePage> {
-  late List<Employee> _employees;
-  DateTime _selectedDate = DateTime.now();
-  String _search = '';
-  AttStatus? _filterStatus;
+  late final EmployeeController _controller;
 
   @override
   void initState() {
     super.initState();
-    _employees = _sampleEmployees();
-  }
-
-  List<Employee> get _filtered {
-    return _employees.where((e) {
-      final q = _search.toLowerCase();
-      final matchSearch = q.isEmpty || e.name.toLowerCase().contains(q) || e.role.toLowerCase().contains(q);
-      final rec = e.recordFor(_selectedDate);
-      final matchStatus = _filterStatus == null || rec?.status == _filterStatus;
-      return matchSearch && matchStatus;
-    }).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-  }
-
-  void _shiftDate(int days) => setState(() => _selectedDate = _selectedDate.add(Duration(days: days)));
-
-  void _markStatus(Employee e, AttStatus status) {
-    setState(() {
-      final existing = e.recordFor(_selectedDate);
-      e.setRecord(_selectedDate, AttRecord(
-        status: status,
-        checkIn: existing?.checkIn ?? '',
-        checkOut: existing?.checkOut ?? '',
-      ));
-    });
-  }
-
-  void _openEmployee(Employee e) async {
-    final result = await showDialog<Employee>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => EmployeeDialog(employee: e, selectedDate: _selectedDate),
-    );
-    if (result != null) {
-      setState(() {
-        final idx = _employees.indexWhere((x) => x.id == result.id);
-        if (idx >= 0) _employees[idx] = result;
-      });
+    if (!Get.isRegistered<EmployeeController>()) {
+      _controller = Get.put(EmployeeController());
+    } else {
+      _controller = Get.find<EmployeeController>();
     }
   }
 
-  void _addEmployee() async {
-    final result = await showDialog<Employee>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => EmployeeDialog(employee: null, selectedDate: _selectedDate),
-    );
-    if (result != null) setState(() => _employees.add(result));
+  void _openAddEmployeeDialog(BuildContext context) {
+    _showEmployeeFormDialog(context, null);
   }
 
-  bool get _isToday => _dateKey(_selectedDate) == _dateKey(DateTime.now());
+  void _openEditEmployeeDialog(BuildContext context, EmployeeModel emp) {
+    _showEmployeeFormDialog(context, emp);
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final filtered = _filtered;
-    int countOf(AttStatus s) => _employees.where((e) => e.recordFor(_selectedDate)?.status == s).length;
-    final present = countOf(AttStatus.present);
-    final absent = countOf(AttStatus.absent);
-    final halfDay = countOf(AttStatus.halfDay);
-    final leave = countOf(AttStatus.leave);
-    final unmarked = _employees.length - present - absent - halfDay - leave - countOf(AttStatus.holiday);
+  void _showEmployeeFormDialog(BuildContext context, EmployeeModel? emp) {
+    final isEdit = emp != null;
+    final nameCtrl = TextEditingController(text: emp?.name ?? '');
+    final roleCtrl = TextEditingController(text: emp?.role ?? '');
+    final phoneCtrl = TextEditingController(text: emp?.phone ?? '');
+    final emailCtrl = TextEditingController(text: emp?.email ?? '');
+    final salaryCtrl = TextEditingController(
+        text: emp?.salary != null && emp!.salary > 0 ? emp.salary.toStringAsFixed(0) : '');
+    String salaryType = emp?.salaryType ?? 'monthly';
+    bool isSaving = false;
 
-    return Scaffold(
-      backgroundColor: kBgGray,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Summary cards ────────────────────────────────────────────
-            Row(
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dCtx) => StatefulBuilder(
+        builder: (ctx, setDState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(isEdit ? Icons.edit_note_rounded : Icons.person_add_rounded, color: kBlue, size: 24),
+              const SizedBox(width: 10),
+              Text(isEdit ? 'Edit Employee Details' : 'Add New Employee',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SummaryCard('Employees', '${_employees.length}', Icons.groups_rounded, kBlue),
-                const SizedBox(width: 16),
-                _SummaryCard('Present', '$present', Icons.check_circle_rounded, kGreen),
-                const SizedBox(width: 16),
-                _SummaryCard('Absent', '$absent', Icons.cancel_rounded, kRed),
-                const SizedBox(width: 16),
-                _SummaryCard('Half Day', '$halfDay', Icons.schedule_rounded, kOrange),
-                const SizedBox(width: 16),
-                _SummaryCard('On Leave', '$leave', Icons.beach_access_rounded, kPurple),
-                if (unmarked > 0) ...[
-                  const SizedBox(width: 16),
-                  _SummaryCard('Unmarked', '$unmarked', Icons.help_outline_rounded, kTextGray),
-                ],
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── Toolbar ──────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: kWhite,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
-              ),
-              child: Row(
-                children: [
-                  // Date switcher
-                  IconButton(onPressed: () => _shiftDate(-1), icon: const Icon(Icons.chevron_left_rounded, color: kTextGray)),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                      );
-                      if (picked != null) setState(() => _selectedDate = picked);
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: kLightBlue, borderRadius: BorderRadius.circular(8)),
-                      child: Row(
+                Row(
+                  children: [
+                    Expanded(child: _buildInput('Full Name *', nameCtrl, 'e.g. Anil Kumar')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildInput('Role / Designation *', roleCtrl, 'e.g. Waiter, Chef, Manager')),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildInput('Phone Number', phoneCtrl, 'e.g. 9876543210', isPhone: true)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildInput('Email Address', emailCtrl, 'e.g. employee@shop.com')),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildInput('Salary (₹) *', salaryCtrl, 'e.g. 18000', isNumber: true)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.calendar_today_rounded, size: 14, color: kDarkBlue),
-                          const SizedBox(width: 8),
-                          Text(_isToday ? 'Today, ${_fmtDate(_selectedDate)}' : _fmtDate(_selectedDate),
-                              style: const TextStyle(color: kDarkBlue, fontWeight: FontWeight.w700, fontSize: 13)),
+                          const Text('Salary Basis',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kTextGray)),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(10)),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: salaryType,
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'monthly', child: Text('Monthly Salary', style: TextStyle(fontSize: 13))),
+                                  DropdownMenuItem(
+                                      value: 'daily', child: Text('Daily Wage', style: TextStyle(fontSize: 13))),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setDState(() => salaryType = val);
+                                },
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  IconButton(onPressed: () => _shiftDate(1), icon: const Icon(Icons.chevron_right_rounded, color: kTextGray)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kBlue, foregroundColor: kWhite, elevation: 0),
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final name = nameCtrl.text.trim();
+                      final role = roleCtrl.text.trim();
+                      final salary = double.tryParse(salaryCtrl.text.trim()) ?? 0.0;
+
+                      if (name.isEmpty || role.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please enter name and role'), backgroundColor: kRed),
+                        );
+                        return;
+                      }
+
+                      setDState(() => isSaving = true);
+
+                      if (isEdit) {
+                        emp.name = name;
+                        emp.role = role;
+                        emp.phone = phoneCtrl.text.trim();
+                        emp.email = emailCtrl.text.trim();
+                        emp.salary = salary;
+                        emp.salaryType = salaryType;
+                        await _controller.editEmployee(emp);
+                      } else {
+                        await _controller.addEmployee(
+                          name: name,
+                          role: role,
+                          phone: phoneCtrl.text.trim(),
+                          email: emailCtrl.text.trim(),
+                          salary: salary,
+                          salaryType: salaryType,
+                        );
+                      }
+
+                      if (mounted) {
+                        Navigator.pop(dCtx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(isEdit ? 'Employee updated successfully!' : 'Employee added successfully!'),
+                            backgroundColor: kGreen,
+                          ),
+                        );
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kWhite))
+                  : Text(isEdit ? 'Save Changes' : 'Add Employee'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteEmployee(BuildContext context, EmployeeModel emp) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Employee?'),
+        content: Text('Are you sure you want to remove "${emp.name}" (${emp.role})?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _controller.deleteEmployee(emp);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${emp.name} deleted'), backgroundColor: kRed),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openEmployeeProfileDialog(BuildContext context, EmployeeModel emp) {
+    showDialog(
+      context: context,
+      builder: (dCtx) => _EmployeeProfileDialog(
+        employee: emp,
+        selectedDate: _controller.selectedDate.value,
+        controller: _controller,
+      ),
+    );
+  }
+
+  Widget _buildInput(String label, TextEditingController ctrl, String hint,
+      {bool isNumber = false, bool isPhone = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kTextGray)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: ctrl,
+          keyboardType: isNumber
+              ? TextInputType.number
+              : isPhone
+                  ? TextInputType.phone
+                  : TextInputType.text,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: kTextGray, fontSize: 12.5),
+            filled: true,
+            fillColor: kBgGray,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBgGray,
+      body: Obx(() {
+        final filteredList = _controller.filteredEmployees;
+        final loading = _controller.isLoading.value;
+        final totalCount = _controller.employees.length;
+        final presentCount = _controller.countOf(AttStatus.present);
+        final absentCount = _controller.countOf(AttStatus.absent);
+        final totalPaid = _controller.totalPaidPayroll;
+        final totalPending = _controller.totalPendingPayroll;
+        final paidCount = _controller.paidEmployeesCount;
+        final pendingCount = _controller.pendingEmployeesCount;
+        final selectedDateStr = _fmtDate(_controller.selectedDate.value);
+        final isToday = dateKey(_controller.selectedDate.value) == dateKey(DateTime.now());
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header & Action Bar
+              Row(
+                children: [
+                  const Icon(Icons.badge_outlined, size: 28, color: kBlue),
                   const SizedBox(width: 12),
-                  // Search
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search by name or role...',
-                        hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
-                        filled: true,
-                        fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      ),
-                      onChanged: (v) => setState(() => _search = v),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _FilterChip('All', _filterStatus == null, () => setState(() => _filterStatus = null)),
-                  const SizedBox(width: 6),
-                  _FilterChip('Present', _filterStatus == AttStatus.present, () => setState(() => _filterStatus = AttStatus.present), color: kGreen),
-                  const SizedBox(width: 6),
-                  _FilterChip('Absent', _filterStatus == AttStatus.absent, () => setState(() => _filterStatus = AttStatus.absent), color: kRed),
-                  const SizedBox(width: 6),
-                  _FilterChip('Half Day', _filterStatus == AttStatus.halfDay, () => setState(() => _filterStatus = AttStatus.halfDay), color: kOrange),
-                  const SizedBox(width: 6),
-                  _FilterChip('Leave', _filterStatus == AttStatus.leave, () => setState(() => _filterStatus = AttStatus.leave), color: kPurple),
+                  const Text('Employee & Attendance Management',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: kTextDark, letterSpacing: -0.3)),
                   const Spacer(),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kBlue,
                       foregroundColor: kWhite,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       elevation: 0,
                     ),
+                    onPressed: () => _openAddEmployeeDialog(context),
                     icon: const Icon(Icons.person_add_rounded, size: 18),
-                    label: const Text('Add Employee', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onPressed: _addEmployee,
+                    label: const Text('Add Employee', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton(
+                    onPressed: () => _controller.loadEmployees(),
+                    icon: const Icon(Icons.refresh_rounded, color: kTextGray),
+                    tooltip: 'Refresh data',
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 18),
 
-            const SizedBox(height: 16),
+              // Summary Cards Strip (Staff, Present, Absent, Paid Payroll, Pending Payroll)
+              Row(
+                children: [
+                  _SummaryCard(title: 'Total Staff', amount: '$totalCount', sub: 'Registered employees', color: kBlue, icon: Icons.groups_rounded),
+                  const SizedBox(width: 14),
+                  _SummaryCard(title: 'Present Today', amount: '$presentCount', sub: 'Active today', color: kGreen, icon: Icons.check_circle_rounded),
+                  const SizedBox(width: 14),
+                  _SummaryCard(title: 'Absent Today', amount: '$absentCount', sub: 'Not attended', color: kRed, icon: Icons.cancel_rounded),
+                  const SizedBox(width: 14),
+                  _SummaryCard(title: 'Paid Salary', amount: '₹${totalPaid.toStringAsFixed(0)}', sub: '$paidCount Employees Paid', color: kGreen, icon: Icons.verified_rounded),
+                  const SizedBox(width: 14),
+                  _SummaryCard(title: 'Pending Salary', amount: '₹${totalPending.toStringAsFixed(0)}', sub: '$pendingCount Employees Pending', color: kOrange, icon: Icons.pending_actions_rounded),
+                ],
+              ),
+              const SizedBox(height: 20),
 
-            // ── Table ────────────────────────────────────────────────────
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: kWhite,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      decoration: const BoxDecoration(color: kBgGray, borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
-                      child: const Row(
-                        children: [
-                          Expanded(flex: 3, child: Text('Employee', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                          Expanded(flex: 2, child: Text('Role', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                          Expanded(flex: 2, child: Text('Check In', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                          Expanded(flex: 2, child: Text('Check Out', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                          Expanded(flex: 3, child: Text('Status', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                          SizedBox(width: 90, child: Text('Details', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600))),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? const Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.groups_outlined, color: kTextGray, size: 48),
-                                  SizedBox(height: 12),
-                                  Text('No employees found', style: TextStyle(color: kTextGray, fontSize: 15)),
-                                ],
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1, color: kDivider),
-                              itemBuilder: (ctx, i) => _EmployeeRow(
-                                employee: filtered[i],
-                                date: _selectedDate,
-                                onMark: (s) => _markStatus(filtered[i], s),
-                                onOpen: () => _openEmployee(filtered[i]),
-                              ),
+              // Controls Toolbar: Date Switcher, Search, Status Filter
+              Row(
+                children: [
+                  // Date Switcher
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(11)),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => _controller.shiftDate(-1),
+                          icon: const Icon(Icons.chevron_left_rounded, color: kTextGray, size: 20),
+                        ),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _controller.selectedDate.value,
+                              firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                              lastDate: DateTime.now().add(const Duration(days: 30)),
+                            );
+                            if (picked != null) _controller.setDate(picked);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today_rounded, size: 14, color: kBlue),
+                                const SizedBox(width: 6),
+                                Text(
+                                  isToday ? 'Today, $selectedDateStr' : selectedDateStr,
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: kTextDark),
+                                ),
+                              ],
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => _controller.shiftDate(1),
+                          icon: const Icon(Icons.chevron_right_rounded, color: kTextGray, size: 20),
+                        ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: const BoxDecoration(color: kBgGray, borderRadius: BorderRadius.vertical(bottom: Radius.circular(14))),
-                      child: Row(
-                        children: [
-                          Text('${filtered.length} employees', style: const TextStyle(color: kTextGray, fontSize: 12)),
-                          const Spacer(),
-                          Text('$present present · $absent absent · $halfDay half-day · $leave leave',
-                              style: const TextStyle(color: kTextDark, fontWeight: FontWeight.w600, fontSize: 12)),
-                        ],
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Search Bar
+                  Expanded(
+                    child: Container(
+                      height: 42,
+                      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(11)),
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search by employee name, role, or phone...',
+                          hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                          prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (v) => _controller.searchQuery.value = v,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Status Filter Chips
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      _FilterChip(label: 'ALL', active: _controller.statusFilter.value == null, onTap: () => _controller.statusFilter.value = null),
+                      _FilterChip(label: 'PRESENT', active: _controller.statusFilter.value == AttStatus.present, onTap: () => _controller.statusFilter.value = AttStatus.present, color: kGreen),
+                      _FilterChip(label: 'ABSENT', active: _controller.statusFilter.value == AttStatus.absent, onTap: () => _controller.statusFilter.value = AttStatus.absent, color: kRed),
+                      _FilterChip(label: 'HALF DAY', active: _controller.statusFilter.value == AttStatus.halfDay, onTap: () => _controller.statusFilter.value = AttStatus.halfDay, color: kOrange),
+                      _FilterChip(label: 'LEAVE', active: _controller.statusFilter.value == AttStatus.leave, onTap: () => _controller.statusFilter.value = AttStatus.leave, color: kPurple),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Employee Table Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: const BoxDecoration(color: kWhite, borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
+                child: const Row(
+                  children: [
+                    Expanded(flex: 3, child: Text('EMPLOYEE', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    Expanded(flex: 2, child: Text('ROLE', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    Expanded(flex: 2, child: Text('PHONE', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    Expanded(flex: 2, child: Text('SALARY', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    Expanded(flex: 3, child: Text('PAYMENT STATUS', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    Expanded(flex: 4, child: Text('MARK ATTENDANCE', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700))),
+                    SizedBox(width: 80, child: Text('ACTIONS', style: TextStyle(color: kTextGray, fontSize: 11.5, fontWeight: FontWeight.w700), textAlign: TextAlign.center)),
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+              const Divider(height: 1, color: kBgGray),
+
+              // Employee Table Body
+              Expanded(
+                child: loading && filteredList.isEmpty
+                    ? const Center(child: CircularProgressIndicator(color: kBlue))
+                    : filteredList.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.badge_outlined, size: 48, color: kTextGray),
+                                const SizedBox(height: 12),
+                                const Text('No employees found.', style: TextStyle(color: kTextDark, fontWeight: FontWeight.w700, fontSize: 16)),
+                                const SizedBox(height: 4),
+                                const Text('Click "Add Employee" above to register staff in the database.', style: TextStyle(color: kTextGray, fontSize: 13)),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: kBlue, foregroundColor: kWhite),
+                                  onPressed: () => _openAddEmployeeDialog(context),
+                                  icon: const Icon(Icons.add_rounded, size: 18),
+                                  label: const Text('Add First Employee'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredList.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 6),
+                            itemBuilder: (ctx, i) {
+                              final emp = filteredList[i];
+                              final rec = emp.recordFor(_controller.selectedDate.value);
+                              final isPaid = emp.isPaidForMonth(_controller.selectedDate.value);
+                              final monthlyEarnings = emp.calculateMonthlyEarnings(_controller.selectedDate.value);
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: kWhite,
+                                  boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Employee Avatar & Name
+                                    Expanded(
+                                      flex: 3,
+                                      child: InkWell(
+                                        onTap: () => _openEmployeeProfileDialog(context, emp),
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 16,
+                                              backgroundColor: kBlue.withOpacity(0.12),
+                                              child: Text(
+                                                emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'E',
+                                                style: const TextStyle(color: kBlue, fontWeight: FontWeight.w700, fontSize: 13),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Flexible(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(emp.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: kTextDark), overflow: TextOverflow.ellipsis),
+                                                  if (emp.email.isNotEmpty)
+                                                    Text(emp.email, style: const TextStyle(fontSize: 10.5, color: kTextGray), overflow: TextOverflow.ellipsis),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Role
+                                    Expanded(
+                                      flex: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(6)),
+                                        child: Text(emp.role, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kTextDark)),
+                                      ),
+                                    ),
+
+                                    // Phone
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(emp.phone.isNotEmpty ? emp.phone : '—', style: const TextStyle(fontSize: 12.5, color: kTextDark)),
+                                    ),
+
+                                    // Salary & Earnings
+                                    Expanded(
+                                      flex: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('₹${monthlyEarnings.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: kTextDark)),
+                                          Text('Base: ₹${emp.salary.toStringAsFixed(0)} (${emp.salaryType})', style: const TextStyle(fontSize: 9.5, color: kTextGray)),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // Salary Payment Status Toggle Button
+                                    Expanded(
+                                      flex: 3,
+                                      child: Row(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () => _controller.toggleSalaryPaid(emp),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: isPaid ? kGreen.withOpacity(0.12) : kOrange.withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: isPaid ? kGreen : kOrange),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(isPaid ? Icons.check_circle_rounded : Icons.pending_rounded, size: 14, color: isPaid ? kGreen : kOrange),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    isPaid ? 'PAID' : 'MARK PAID',
+                                                    style: TextStyle(
+                                                      color: isPaid ? kGreen : kOrange,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // Attendance Action Buttons
+                                    Expanded(
+                                      flex: 4,
+                                      child: Wrap(
+                                        spacing: 6,
+                                        children: [
+                                          _AttButton(
+                                            label: 'Present',
+                                            active: rec?.status == AttStatus.present,
+                                            color: kGreen,
+                                            onTap: () => _controller.markAttendance(emp, AttStatus.present, checkIn: '09:00'),
+                                          ),
+                                          _AttButton(
+                                            label: 'Absent',
+                                            active: rec?.status == AttStatus.absent,
+                                            color: kRed,
+                                            onTap: () => _controller.markAttendance(emp, AttStatus.absent),
+                                          ),
+                                          _AttButton(
+                                            label: 'Half Day',
+                                            active: rec?.status == AttStatus.halfDay,
+                                            color: kOrange,
+                                            onTap: () => _controller.markAttendance(emp, AttStatus.halfDay, checkIn: '09:00', checkOut: '13:30'),
+                                          ),
+                                          _AttButton(
+                                            label: 'Leave',
+                                            active: rec?.status == AttStatus.leave,
+                                            color: kPurple,
+                                            onTap: () => _controller.markAttendance(emp, AttStatus.leave),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // Action Buttons (Edit / Delete)
+                                    SizedBox(
+                                      width: 80,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          IconButton(
+                                            onPressed: () => _openEditEmployeeDialog(context, emp),
+                                            icon: const Icon(Icons.edit_outlined, size: 18, color: kBlue),
+                                            tooltip: 'Edit Details & Salary',
+                                          ),
+                                          IconButton(
+                                            onPressed: () => _confirmDeleteEmployee(context, emp),
+                                            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: kRed),
+                                            tooltip: 'Delete Employee',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 }
 
-String _fmtDate(DateTime d) => '${d.day}/${d.month}/${d.year}';
+String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
-// ─── Summary Card ─────────────────────────────────────────────────────────────
-Widget _SummaryCard(String label, String value, IconData icon, Color color) {
-  return Expanded(
-    child: Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: kWhite,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label, style: const TextStyle(color: kTextGray, fontSize: 11)),
-                const SizedBox(height: 3),
-                Text(value, style: const TextStyle(color: kTextDark, fontSize: 18, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
+class _SummaryCard extends StatelessWidget {
+  final String title, amount, sub;
+  final Color color;
+  final IconData icon;
 
-// ─── Filter Chip ──────────────────────────────────────────────────────────────
-Widget _FilterChip(String label, bool active, VoidCallback onTap, {Color color = kBlue}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: active ? color.withOpacity(0.12) : kBgGray,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: active ? color : Colors.transparent),
-      ),
-      child: Text(label, style: TextStyle(color: active ? color : kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
-    ),
-  );
-}
-
-// ─── Employee Row ──────────────────────────────────────────────────────────────
-class _EmployeeRow extends StatelessWidget {
-  final Employee employee;
-  final DateTime date;
-  final Function(AttStatus) onMark;
-  final VoidCallback onOpen;
-
-  const _EmployeeRow({required this.employee, required this.date, required this.onMark, required this.onOpen});
+  const _SummaryCard({
+    required this.title,
+    required this.amount,
+    required this.sub,
+    required this.color,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final rec = employee.recordFor(date);
-    return InkWell(
-      onTap: onOpen,
-      hoverColor: kLightBlue.withOpacity(0.4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: kWhite,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+        ),
         child: Row(
           children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
             Expanded(
-              flex: 3,
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: kLightBlue,
-                    child: Text(employee.name.isNotEmpty ? employee.name[0].toUpperCase() : '?',
-                        style: const TextStyle(color: kDarkBlue, fontWeight: FontWeight.w700, fontSize: 13)),
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(employee.name, style: const TextStyle(color: kTextDark, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis),
-                  ),
+                  Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTextGray)),
+                  const SizedBox(height: 2),
+                  Text(amount, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: kTextDark)),
+                  const SizedBox(height: 2),
+                  Text(sub, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
                 ],
               ),
             ),
-            Expanded(flex: 2, child: Text(employee.role, style: const TextStyle(color: kTextGray, fontSize: 13))),
-            Expanded(flex: 2, child: Text(rec?.checkIn.isNotEmpty == true ? rec!.checkIn : '—', style: const TextStyle(color: kTextGray, fontSize: 13))),
-            Expanded(flex: 2, child: Text(rec?.checkOut.isNotEmpty == true ? rec!.checkOut : '—', style: const TextStyle(color: kTextGray, fontSize: 13))),
-            Expanded(
-              flex: 3,
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: AttStatus.values.where((s) => s != AttStatus.holiday).map((s) {
-                  final active = rec?.status == s;
-                  final c = _statusColor(s);
-                  return GestureDetector(
-                    onTap: () => onMark(s),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: active ? c.withOpacity(0.14) : kBgGray,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: active ? c : Colors.transparent),
-                      ),
-                      child: Text(_statusLabel(s), style: TextStyle(color: active ? c : kTextGray, fontSize: 10, fontWeight: FontWeight.w700)),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            SizedBox(
-              width: 90,
-              child: IconButton(
-                onPressed: onOpen,
-                icon: const Icon(Icons.chevron_right_rounded, color: kTextGray),
-              ),
-            ),
           ],
         ),
       ),
@@ -473,189 +663,207 @@ class _EmployeeRow extends StatelessWidget {
   }
 }
 
-Color _statusColor(AttStatus s) => switch (s) {
-  AttStatus.present => kGreen,
-  AttStatus.absent => kRed,
-  AttStatus.halfDay => kOrange,
-  AttStatus.leave => kPurple,
-  AttStatus.holiday => kTextGray,
-};
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final Color color;
 
-String _statusLabel(AttStatus s) => switch (s) {
-  AttStatus.present => 'Present',
-  AttStatus.absent => 'Absent',
-  AttStatus.halfDay => 'Half Day',
-  AttStatus.leave => 'Leave',
-  AttStatus.holiday => 'Holiday',
-};
-
-// ─── Employee Dialog (profile + monthly history + add new) ────────────────────
-class EmployeeDialog extends StatefulWidget {
-  final Employee? employee; // null = add new
-  final DateTime selectedDate;
-  const EmployeeDialog({super.key, required this.employee, required this.selectedDate});
-
-  @override
-  State<EmployeeDialog> createState() => _EmployeeDialogState();
-}
-
-class _EmployeeDialogState extends State<EmployeeDialog> {
-  late TextEditingController _nameCtrl;
-  late TextEditingController _roleCtrl;
-  late TextEditingController _phoneCtrl;
-  static int _idCounter = 7;
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.employee;
-    _nameCtrl = TextEditingController(text: e?.name ?? '');
-    _roleCtrl = TextEditingController(text: e?.role ?? '');
-    _phoneCtrl = TextEditingController(text: e?.phone ?? '');
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _roleCtrl.dispose();
-    _phoneCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    if (_nameCtrl.text.trim().isEmpty || _roleCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter name and role'), backgroundColor: kRed));
-      return;
-    }
-    if (widget.employee != null) {
-      widget.employee!.name = _nameCtrl.text.trim();
-      widget.employee!.role = _roleCtrl.text.trim();
-      widget.employee!.phone = _phoneCtrl.text.trim();
-      Navigator.pop(context, widget.employee);
-    } else {
-      Navigator.pop(context, Employee(id: 'E${_idCounter++}', name: _nameCtrl.text.trim(), role: _roleCtrl.text.trim(), phone: _phoneCtrl.text.trim()));
-    }
-  }
+  const _FilterChip({required this.label, required this.active, required this.onTap, this.color = kBlue});
 
   @override
   Widget build(BuildContext context) {
-    final isNew = widget.employee == null;
-    final stats = widget.employee?.monthStats(widget.selectedDate);
-    final sortedDates = widget.employee?.records.keys.toList()?..sort((a, b) => b.compareTo(a));
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? color : kWhite,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? kWhite : kTextDark,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AttButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AttButton({required this.label, required this.active, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? color : kBgGray,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? color : Colors.transparent),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? kWhite : kTextDark,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmployeeProfileDialog extends StatelessWidget {
+  final EmployeeModel employee;
+  final DateTime selectedDate;
+  final EmployeeController controller;
+
+  const _EmployeeProfileDialog({
+    required this.employee,
+    required this.selectedDate,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = employee.monthStats(selectedDate);
+    final earnings = employee.calculateMonthlyEarnings(selectedDate);
+    final isPaid = employee.isPaidForMonth(selectedDate);
+    final sortedDates = employee.records.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SizedBox(
-        width: 520,
+        width: 540,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: const BoxDecoration(color: kBlue, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
               child: Row(
                 children: [
-                  Icon(isNew ? Icons.person_add_rounded : Icons.badge_rounded, color: kWhite),
+                  const Icon(Icons.badge_rounded, color: kWhite, size: 24),
                   const SizedBox(width: 10),
-                  Text(isNew ? 'Add Employee' : widget.employee!.name,
-                      style: const TextStyle(color: kWhite, fontWeight: FontWeight.w700, fontSize: 16)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(employee.name, style: const TextStyle(color: kWhite, fontWeight: FontWeight.w800, fontSize: 16)),
+                      Text('${employee.role} · Base Salary: ₹${employee.salary.toStringAsFixed(0)} (${employee.salaryType})', style: TextStyle(color: kWhite.withOpacity(0.85), fontSize: 11.5)),
+                    ],
+                  ),
                   const Spacer(),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, color: kWhite), padding: EdgeInsets.zero),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, color: kWhite)),
                 ],
               ),
             ),
+
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: _Field('Name *', _nameCtrl, hint: 'e.g. Anil Kumar')),
-                        const SizedBox(width: 16),
-                        Expanded(child: _Field('Role *', _roleCtrl, hint: 'e.g. Waiter')),
-                      ],
+                    // Monthly Salary Calculation Card + Pay Button
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(14)),
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('ESTIMATED MONTHLY EARNINGS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kTextGray)),
+                              const SizedBox(height: 4),
+                              Text('₹${earnings.toStringAsFixed(0)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: kGreen)),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Based on ${stats[AttStatus.present] ?? 0} Present, ${stats[AttStatus.halfDay] ?? 0} Half Days',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTextDark),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isPaid ? kGreen : kOrange,
+                              foregroundColor: kWhite,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () {
+                              controller.toggleSalaryPaid(employee);
+                              Navigator.pop(context);
+                            },
+                            icon: Icon(isPaid ? Icons.check_circle_rounded : Icons.payments_rounded, size: 18),
+                            label: Text(isPaid ? 'Salary Paid' : 'Mark Salary Paid'),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    _Field('Phone', _phoneCtrl, hint: 'e.g. 9876543210', keyboardType: TextInputType.phone),
 
-                    if (!isNew) ...[
-                      const SizedBox(height: 24),
-                      const Text('This Month', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: AttStatus.values.where((s) => s != AttStatus.holiday).map((s) {
-                          final count = stats?[s] ?? 0;
-                          final c = _statusColor(s);
-                          return Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(color: c.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                              child: Column(
-                                children: [
-                                  Text('$count', style: TextStyle(color: c, fontWeight: FontWeight.w800, fontSize: 16)),
-                                  const SizedBox(height: 2),
-                                  Text(_statusLabel(s), style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
-                                ],
-                              ),
+                    // Monthly Attendance Stats
+                    const Text('Attendance Summary (This Month)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: kTextDark)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _StatBox(label: 'Present', value: '${stats[AttStatus.present] ?? 0}', color: kGreen),
+                        const SizedBox(width: 8),
+                        _StatBox(label: 'Absent', value: '${stats[AttStatus.absent] ?? 0}', color: kRed),
+                        const SizedBox(width: 8),
+                        _StatBox(label: 'Half Day', value: '${stats[AttStatus.halfDay] ?? 0}', color: kOrange),
+                        const SizedBox(width: 8),
+                        _StatBox(label: 'Leave', value: '${stats[AttStatus.leave] ?? 0}', color: kPurple),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Attendance History List
+                    const Text('Recent Attendance Logs', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: kTextDark)),
+                    const SizedBox(height: 10),
+                    if (sortedDates.isEmpty)
+                      const Text('No attendance logs recorded yet for this employee.', style: TextStyle(color: kTextGray, fontSize: 12.5))
+                    else
+                      Column(
+                        children: sortedDates.take(15).map((dateKey) {
+                          final r = employee.records[dateKey]!;
+                          final color = _statusColor(r.status);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(10), border: Border.all(color: kBgGray)),
+                            child: Row(
+                              children: [
+                                Text(dateKey, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: kTextDark)),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+                                  child: Text(r.status.name.toUpperCase(), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+                                ),
+                              ],
                             ),
                           );
                         }).toList(),
                       ),
-                      const SizedBox(height: 20),
-                      const Text('Recent History', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
-                      const SizedBox(height: 10),
-                      if (sortedDates == null || sortedDates.isEmpty)
-                        const Text('No records yet', style: TextStyle(color: kTextGray, fontSize: 13))
-                      else
-                        ...sortedDates.take(10).map((k) {
-                          final r = widget.employee!.records[k]!;
-                          final c = _statusColor(r.status);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: Row(
-                              children: [
-                                Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-                                const SizedBox(width: 10),
-                                Expanded(child: Text(k, style: const TextStyle(color: kTextDark, fontSize: 13))),
-                                Text(_statusLabel(r.status), style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12)),
-                                if (r.checkIn.isNotEmpty) ...[
-                                  const SizedBox(width: 12),
-                                  Text('${r.checkIn} - ${r.checkOut.isEmpty ? '...' : r.checkOut}', style: const TextStyle(color: kTextGray, fontSize: 11)),
-                                ],
-                              ],
-                            ),
-                          );
-                        }),
-                    ],
                   ],
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kBlue, foregroundColor: kWhite, elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    icon: Icon(isNew ? Icons.person_add_rounded : Icons.save_rounded, size: 18),
-                    label: Text(isNew ? 'Add Employee' : 'Save Changes', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    onPressed: _save,
-                  ),
-                ],
               ),
             ),
           ],
@@ -663,31 +871,43 @@ class _EmployeeDialogState extends State<EmployeeDialog> {
       ),
     );
   }
+
+  Color _statusColor(AttStatus s) {
+    switch (s) {
+      case AttStatus.present:
+        return kGreen;
+      case AttStatus.absent:
+        return kRed;
+      case AttStatus.halfDay:
+        return kOrange;
+      case AttStatus.leave:
+        return kPurple;
+      case AttStatus.holiday:
+        return kTextGray;
+    }
+  }
 }
 
-// ─── Field Helper ─────────────────────────────────────────────────────────────
-Widget _Field(String label, TextEditingController ctrl, {
-  String hint = '',
-  TextInputType keyboardType = TextInputType.text,
-}) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 6),
-      TextField(
-        controller: ctrl,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-          filled: true,
-          fillColor: kBgGray,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: kBlue, width: 1.5)),
+class _StatBox extends StatelessWidget {
+  final String label, value;
+  final Color color;
+
+  const _StatBox({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+        child: Column(
+          children: [
+            Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700)),
+          ],
         ),
       ),
-    ],
-  );
+    );
+  }
 }

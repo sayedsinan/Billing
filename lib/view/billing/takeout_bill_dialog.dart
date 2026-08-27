@@ -52,7 +52,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   /// instead of creating a duplicate line.
   void _addProductToOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name);
+      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
       if (idx >= 0) {
         _items[idx] = OrderItem(
           name: p.name,
@@ -69,7 +69,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   /// it hits 0, so the block goes back to its normal "tap to add" state.
   void _decreaseProductFromOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name);
+      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
       if (idx < 0) return;
       final newQty = _items[idx].qty - 1;
       if (newQty <= 0) {
@@ -90,7 +90,31 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
     });
   }
 
-  Future<void> _generateAndPrint() async {
+  bool _busyPrinting = false;
+
+  Future<Bill?> _createDirectBill(List<OrderItem> validItems) async {
+    try {
+      final data = await ApiService.instance.createDirectBill(
+        items: validItems
+            .map((i) => {'name': i.name, 'qty': i.qty, 'rate': i.rate})
+            .toList(),
+        customerName: _customerNameCtrl.text.trim().isEmpty
+            ? null
+            : _customerNameCtrl.text.trim(),
+      );
+      return Bill.fromJson(data);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: kRed),
+        );
+      }
+      return null;
+    }
+  }
+
+  /// 1. Print KOT Only (Sends Kitchen ticket to printer)
+  Future<void> _handlePrintKOT() async {
     final validItems = _items
         .where((i) => i.name.trim().isNotEmpty && i.qty > 0)
         .toList();
@@ -104,54 +128,20 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       return;
     }
 
-    setState(() => _generating = true);
+    setState(() => _busyPrinting = true);
     try {
-      final data = await ApiService.instance.createDirectBill(
-        items: validItems
-            .map((i) => {'name': i.name, 'qty': i.qty, 'rate': i.rate})
-            .toList(),
-        customerName: _customerNameCtrl.text.trim().isEmpty
-            ? null
-            : _customerNameCtrl.text.trim(),
-      );
-      final bill = Bill.fromJson(data);
-      setState(() {
-        _generating = false;
+      final bill = _generatedBill ?? await _createDirectBill(validItems);
+      if (bill != null) {
         _generatedBill = bill;
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Bill generated · Total ₹${bill.grandTotal.toStringAsFixed(2)}',
-          ),
-          backgroundColor: kGreen,
-        ),
-      );
-
-      await _printBill(bill);
-    } on ApiException catch (e) {
-      setState(() => _generating = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: kRed),
-        );
-      }
-    }
-  }
-
-  Future<void> _printBill(Bill bill) async {
-    setState(() => _printing = true);
-    try {
-      await PrintService.instance.printBillWithKOT(bill);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sent to printer'),
-            backgroundColor: kGreen,
-          ),
-        );
+        await PrintService.instance.printKitchenBill(bill);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('KOT sent to printer'),
+              backgroundColor: kGreen,
+            ),
+          );
+        }
       }
     } on PrintException catch (e) {
       if (mounted) {
@@ -159,8 +149,114 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
           SnackBar(content: Text(e.message), backgroundColor: kRed),
         );
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kRed),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _printing = false);
+      if (mounted) setState(() => _busyPrinting = false);
+    }
+  }
+
+  /// 2. Print Bill Only (Generates bill, prints customer receipt, clears items for next customer)
+  Future<void> _handlePrintBill() async {
+    final validItems = _items
+        .where((i) => i.name.trim().isNotEmpty && i.qty > 0)
+        .toList();
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one item'),
+          backgroundColor: kRed,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _busyPrinting = true);
+    try {
+      final bill = await _createDirectBill(validItems);
+      if (bill != null) {
+        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await PrintService.instance.printBill(bill);
+        _resetForNewOrder();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Bill #${bill.billNumber} printed & cleared for next customer!',
+              ),
+              backgroundColor: kGreen,
+            ),
+          );
+        }
+      }
+    } on PrintException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: kRed),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyPrinting = false);
+    }
+  }
+
+  /// 3. KOT & Bill Combo (Generates bill, prints KOT + Customer Receipt, clears items for next customer)
+  Future<void> _handleKOTAndBill() async {
+    final validItems = _items
+        .where((i) => i.name.trim().isNotEmpty && i.qty > 0)
+        .toList();
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one item'),
+          backgroundColor: kRed,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _busyPrinting = true);
+    try {
+      final bill = await _createDirectBill(validItems);
+      if (bill != null) {
+        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await PrintService.instance.printBillWithKOT(bill);
+        _resetForNewOrder();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'KOT & Bill #${bill.billNumber} printed & cleared for next customer!',
+              ),
+              backgroundColor: kGreen,
+            ),
+          );
+        }
+      }
+    } on PrintException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: kRed),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyPrinting = false);
     }
   }
 
@@ -332,7 +428,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                                   (p) => _TakeoutProductBlock(
                                     product: p,
                                     qtyInOrder: _items
-                                        .where((i) => i.name == p.name)
+                                        .where((i) => i.name == p.name && i.rate == p.price)
                                         .fold(0.0, (s, i) => s + i.qty),
                                     onTap: () => _addProductToOrder(p),
                                     onDecrease: () =>
@@ -523,70 +619,50 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (_generatedBill == null)
+                  if (_items.isNotEmpty) ...[
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: kOrange,
+                        backgroundColor: kPurple,
                         foregroundColor: kWhite,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
+                          horizontal: 14,
                           vertical: 12,
                         ),
                       ),
-                      onPressed: _generating ? null : _generateAndPrint,
-                      icon: _generating
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: kWhite,
-                              ),
-                            )
-                          : const Icon(Icons.receipt_long_rounded, size: 18),
+                      onPressed: _busyPrinting ? null : _handlePrintKOT,
+                      icon: const Icon(Icons.restaurant_rounded, size: 18),
                       label: const Text(
-                        'Generate & Print',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    )
-                  else ...[
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kBlue,
-                        side: const BorderSide(color: kBlue),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onPressed: _printing
-                          ? null
-                          : _generateAndPrint, // <-- regenerate, not stale _generatedBill
-                      icon: _printing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: kBlue,
-                              ),
-                            )
-                          : const Icon(Icons.print_rounded, size: 18),
-                      label: const Text(
-                        'Print Again',
+                        'Print KOT',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kGreen,
+                        foregroundColor: kWhite,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: _busyPrinting ? null : _handlePrintBill,
+                      icon: const Icon(Icons.print_rounded, size: 18),
+                      label: const Text(
+                        'Print Bill',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kOrange,
@@ -596,17 +672,14 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
+                          horizontal: 14,
                           vertical: 12,
                         ),
                       ),
-                      onPressed: _resetForNewOrder,
-                      icon: const Icon(
-                        Icons.add_circle_outline_rounded,
-                        size: 18,
-                      ),
+                      onPressed: _busyPrinting ? null : _handleKOTAndBill,
+                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
                       label: const Text(
-                        'New Bill',
+                        'KOT & Bill',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),

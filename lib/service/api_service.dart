@@ -298,6 +298,16 @@ class ApiService {
     await _request(() => _dio.delete('/bills/$id'));
   }
 
+  Future<Map<String, dynamic>> markBillPaid(
+    String id, {
+    String paymentMethod = 'cash',
+  }) async {
+    final data = await _request(
+      () => _dio.patch('/bills/$id/pay', data: {'paymentMethod': paymentMethod}),
+    );
+    return Map<String, dynamic>.from(data);
+  }
+
   Future<Map<String, dynamic>> getBillById(String id) async {
     final data = await _request(() => _dio.get('/bills/$id'));
     return Map<String, dynamic>.from(data);
@@ -313,6 +323,144 @@ class ApiService {
 
   Future<Map<String, dynamic>> cancelBill(String id) async {
     final data = await _request(() => _dio.patch('/bills/$id/cancel'));
+    return Map<String, dynamic>.from(data);
+  }
+
+  // ── Expenses & Counter Cash Out ─────────────────────────────────────
+  Future<List<dynamic>> getExpenses({
+    String? type,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await _request(
+      () => _dio.get(
+        '/expenses',
+        queryParameters: {
+          if (type != null) 'type': type,
+          if (from != null) 'from': from.toIso8601String(),
+          if (to != null) 'to': to.toIso8601String(),
+        },
+      ),
+    );
+    return data is List ? data : [];
+  }
+
+  Future<Map<String, dynamic>> createExpense({
+    required String type,
+    required String title,
+    required double amount,
+    String? categoryOrPerson,
+    String? paymentMethod,
+    String? note,
+  }) async {
+    final data = await _request(
+      () => _dio.post(
+        '/expenses',
+        data: {
+          'type': type,
+          'title': title,
+          'amount': amount,
+          if (categoryOrPerson != null) 'categoryOrPerson': categoryOrPerson,
+          if (paymentMethod != null) 'paymentMethod': paymentMethod,
+          if (note != null) 'note': note,
+        },
+      ),
+    );
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<void> deleteExpense(String id) async {
+    await _request(() => _dio.delete('/expenses/$id'));
+  }
+
+  // ── Employee & Attendance Management ────────────────────────────────
+  Future<List<dynamic>> getEmployees({String? search, String? dateKey}) async {
+    final data = await _request(
+      () => _dio.get(
+        '/employees',
+        queryParameters: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (dateKey != null && dateKey.isNotEmpty) 'dateKey': dateKey,
+        },
+      ),
+    );
+    return data is List ? data : [];
+  }
+
+  Future<Map<String, dynamic>> createEmployee({
+    required String name,
+    required String role,
+    String? phone,
+    String? email,
+    double? salary,
+    String? salaryType,
+  }) async {
+    final data = await _request(
+      () => _dio.post(
+        '/employees',
+        data: {
+          'name': name,
+          'role': role,
+          'phone': phone ?? '',
+          'email': email ?? '',
+          'salary': salary ?? 0.0,
+          'salaryType': salaryType ?? 'monthly',
+        },
+      ),
+    );
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> updateEmployee(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    final data = await _request(() => _dio.put('/employees/$id', data: body));
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<void> deleteEmployee(String id) async {
+    await _request(() => _dio.delete('/employees/$id'));
+  }
+
+  Future<Map<String, dynamic>> markAttendance({
+    required String employeeId,
+    required String dateKey,
+    required String status,
+    String? checkIn,
+    String? checkOut,
+    String? note,
+  }) async {
+    final data = await _request(
+      () => _dio.post(
+        '/employees/attendance',
+        data: {
+          'employeeId': employeeId,
+          'dateKey': dateKey,
+          'status': status,
+          'checkIn': checkIn ?? '',
+          'checkOut': checkOut ?? '',
+          'note': note ?? '',
+        },
+      ),
+    );
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> paySalary({
+    required String employeeId,
+    required String monthKey,
+    required String status,
+  }) async {
+    final data = await _request(
+      () => _dio.patch(
+        '/employees/$employeeId/pay-salary',
+        data: {
+          'monthKey': monthKey,
+          'status': status,
+        },
+      ),
+    );
     return Map<String, dynamic>.from(data);
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:test_bill/view/attendance/attendance_page.dart';
+import 'package:test_bill/theme/colors.dart';
 class StockRow extends StatelessWidget {
   final String name;
   final int current, max;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:test_bill/controller/table_controller.dart';
 import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/models/bill_model.dart';
@@ -540,7 +541,11 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
   @override
   void initState() {
     super.initState();
-    _waiterCtrl = TextEditingController(text: widget.table.waiter ?? '');
+    final savedWaiter = GetStorage().read<String>('lastWaiter');
+    final initialWaiter = (widget.table.waiter != null && widget.table.waiter!.isNotEmpty)
+        ? widget.table.waiter
+        : savedWaiter;
+    _waiterCtrl = TextEditingController(text: initialWaiter ?? '');
     _seatsCtrl = TextEditingController(text: widget.table.seats.toString());
     _items = widget.table.items.map((i) => OrderItem(name: i.name, qty: i.qty, rate: i.rate)).toList();
     _status = widget.table.status;
@@ -562,25 +567,32 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
 
   double get _subtotal => _items.fold(0, (s, i) => s + i.total);
 
+  bool _busyPrinting = false;
+
+  void _autoSetOccupiedIfItemsPresent() {
+    if (_items.isNotEmpty && _status == TableStatus.empty) {
+      _status = TableStatus.occupied;
+      _occupiedSince ??= DateTime.now();
+    }
+  }
+
   /// Adds a product from the catalog to the current order immediately.
-  /// If the product is already on the bill, its quantity is bumped by 1
-  /// instead of creating a duplicate line.
   void _addProductToOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name);
+      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
       if (idx >= 0) {
         _items[idx] = OrderItem(name: p.name, qty: _items[idx].qty + 1, rate: p.price);
       } else {
         _items.add(OrderItem(name: p.name, qty: 1, rate: p.price));
       }
+      _autoSetOccupiedIfItemsPresent();
     });
   }
 
-  /// Decreases a product's quantity by 1. Removes the line entirely once
-  /// it hits 0, so the block goes back to its normal "tap to add" state.
+  /// Decreases a product's quantity by 1.
   void _decreaseProductFromOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name);
+      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
       if (idx < 0) return;
       final newQty = _items[idx].qty - 1;
       if (newQty <= 0) {
@@ -591,89 +603,186 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
     });
   }
 
+  Future<bool> _saveTableInternal({TableStatus? overrideStatus, bool clearItems = false}) async {
+    _autoSetOccupiedIfItemsPresent();
+    final targetStatus = overrideStatus ?? _status;
+    final waiterText = _waiterCtrl.text.trim();
+    if (waiterText.isNotEmpty) {
+      GetStorage().write('lastWaiter', waiterText);
+    }
+    final updated = widget.table.copyWith(
+      seats: int.tryParse(_seatsCtrl.text) ?? widget.table.seats,
+      status: targetStatus,
+      waiter: waiterText.isEmpty ? null : waiterText,
+      clearWaiter: waiterText.isEmpty,
+      items: clearItems ? [] : _items.where((i) => i.name.trim().isNotEmpty).toList(),
+      occupiedSince: targetStatus == TableStatus.empty ? null : (_occupiedSince ?? DateTime.now()),
+      clearOccupiedSince: targetStatus == TableStatus.empty,
+    );
+    return await widget.controller.saveTable(updated);
+  }
+
   Future<void> _save() async {
+    _autoSetOccupiedIfItemsPresent();
     if (_status != TableStatus.empty && _status != TableStatus.cleaning && _waiterCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assign a waiter'), backgroundColor: kRed));
       return;
     }
-    final updated = widget.table.copyWith(
-      seats: int.tryParse(_seatsCtrl.text) ?? widget.table.seats,
-      status: _status,
-      waiter: _waiterCtrl.text.trim().isEmpty ? null : _waiterCtrl.text.trim(),
-      clearWaiter: _waiterCtrl.text.trim().isEmpty,
-      items: _items.where((i) => i.name.trim().isNotEmpty).toList(),
-      occupiedSince: _status == TableStatus.empty ? null : (_occupiedSince ?? DateTime.now()),
-      clearOccupiedSince: _status == TableStatus.empty,
-    );
-    final ok = await widget.controller.saveTable(updated);
+    final ok = await _saveTableInternal();
     if (ok && mounted) Navigator.pop(context);
   }
 
-  /// Generates the bill on the server, then immediately sends it to the
-  /// thermal printer. The dialog stays open afterwards so the user can
-  /// re-print, or tap "New Bill" to close and start the next order.
-  Future<void> _generateBill() async {
-    setState(() => _generatingBill = true);
-    final bill = await widget.controller.generateBill(widget.table.id);
-    setState(() {
-      _generatingBill = false;
-      _generatedBill = bill;
-    });
+  /// 1. Print KOT Only: Saves order, updates status to Occupied, prints KOT ticket, leaves table occupied.
+  Future<void> _handlePrintKOT() async {
+    final validItems = _items.where((i) => i.name.trim().isNotEmpty).toList();
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one item to print KOT'), backgroundColor: kRed),
+      );
+      return;
+    }
 
-    if (bill == null || !mounted) return;
+    setState(() => _busyPrinting = true);
+    _autoSetOccupiedIfItemsPresent();
+    await _saveTableInternal();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Bill generated · Total ₹${bill.grandTotal.toStringAsFixed(2)}'), backgroundColor: kGreen),
+    final tempBill = Bill(
+      id: '',
+      billNumber: widget.table.tableId,
+      source: 'table',
+      tableId: widget.table.tableId,
+      waiter: _waiterCtrl.text.trim().isEmpty ? null : _waiterCtrl.text.trim(),
+      items: validItems.map((i) => BillItem(name: i.name, qty: i.qty, rate: i.rate, total: i.total)).toList(),
+      subtotal: _subtotal,
+      taxRate: 0,
+      taxAmount: 0,
+      discount: 0,
+      grandTotal: _subtotal,
+      paymentMethod: 'cash',
+      status: BillStatus.unpaid,
+      createdAt: DateTime.now(),
     );
 
-    // Auto-print right away; the Print Bill button lets them reprint if needed.
-    await _printBill(bill);
+    try {
+      await PrintService.instance.printKitchenBill(tempBill);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('KOT sent to printer · Table is Occupied'), backgroundColor: kGreen),
+        );
+      }
+    } on PrintException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print error: $e'), backgroundColor: kRed));
+      }
+    } finally {
+      if (mounted) setState(() => _busyPrinting = false);
+    }
   }
-Future<void> _printBill(Bill bill) async {
-  setState(() => _printing = true);
-  debugPrint('🖨️ [TableDialog] Starting print for bill #${bill.billNumber}');
-  try {
-    await PrintService.instance.printBill(bill);
-    debugPrint('🖨️ [TableDialog] printBill() completed OK for #${bill.billNumber}');
-    if (mounted) {
+
+  /// 2. Print Bill Only: Saves order, generates bill, marks paid, prints bill, and clears/empties table.
+  Future<void> _handlePrintBill() async {
+    final validItems = _items.where((i) => i.name.trim().isNotEmpty).toList();
+    if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
+        const SnackBar(content: Text('No items to bill'), backgroundColor: kRed),
       );
+      return;
     }
-  } on PrintException catch (e) {
-    debugPrint('🖨️ [TableDialog] PrintException: ${e.message}');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: kRed),
-      );
+
+    setState(() => _busyPrinting = true);
+    _autoSetOccupiedIfItemsPresent();
+    final ok = await _saveTableInternal();
+    if (!ok) {
+      if (mounted) setState(() => _busyPrinting = false);
+      return;
     }
-  } catch (e, st) {
-    debugPrint('🖨️ [TableDialog] Unexpected print error: $e\n$st');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Print failed: $e'), backgroundColor: kRed),
-      );
+
+    final bill = await widget.controller.generateBill(widget.table.id);
+    if (bill == null) {
+      if (mounted) setState(() => _busyPrinting = false);
+      return;
     }
-  } finally {
-    if (mounted) setState(() => _printing = false);
+
+    try {
+      await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+      await PrintService.instance.printBill(bill);
+
+      // Empty table in DB and local list
+      await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
+      await widget.controller.fetchTables();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bill #${bill.billNumber} printed & Table ${widget.table.tableId} emptied!'), backgroundColor: kGreen),
+        );
+        Navigator.pop(context);
+      }
+    } on PrintException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: kRed));
+      }
+    } finally {
+      if (mounted) setState(() => _busyPrinting = false);
+    }
   }
-}
-  /// Resets the dialog back to a blank order for this table so the next
-  /// customer can be served immediately, without closing and reopening it.
-  /// (Previously this just called Navigator.pop, which closed the dialog
-  /// but left it looking like nothing happened.)
-  void _startNewBill() {
-    setState(() {
-      _items = [];
-      _generatedBill = null;
-      _waiterCtrl.clear();
-      _occupiedSince = null;
-      _status = TableStatus.empty;
-    });
-    // Refresh the table list in the background so the card behind this
-    // dialog reflects the now-billed table (status/items cleared server-side
-    // by generateBill).
-    widget.controller.fetchTables();
+
+  /// 3. KOT & Bill (Combo): Saves order, generates bill, marks paid, prints KOT + Bill, and clears/empties table.
+  Future<void> _handleKOTAndBill() async {
+    final validItems = _items.where((i) => i.name.trim().isNotEmpty).toList();
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No items to bill'), backgroundColor: kRed),
+      );
+      return;
+    }
+
+    setState(() => _busyPrinting = true);
+    _autoSetOccupiedIfItemsPresent();
+    final ok = await _saveTableInternal();
+    if (!ok) {
+      if (mounted) setState(() => _busyPrinting = false);
+      return;
+    }
+
+    final bill = await widget.controller.generateBill(widget.table.id);
+    if (bill == null) {
+      if (mounted) setState(() => _busyPrinting = false);
+      return;
+    }
+
+    try {
+      await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+      await PrintService.instance.printBillWithKOT(bill);
+
+      // Empty table in DB and local list
+      await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
+      await widget.controller.fetchTables();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('KOT & Bill #${bill.billNumber} printed & Table ${widget.table.tableId} emptied!'), backgroundColor: kGreen),
+        );
+        Navigator.pop(context);
+      }
+    } on PrintException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: kRed));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: kRed));
+      }
+    } finally {
+      if (mounted) setState(() => _busyPrinting = false);
+    }
   }
 
   @override
@@ -766,7 +875,7 @@ Future<void> _printBill(Bill bill) async {
                             children: matches.map((p) => _ProductBlock(
                               product: p,
                               qtyInOrder: _items
-                                  .where((i) => i.name == p.name)
+                                  .where((i) => i.name == p.name && i.rate == p.price)
                                   .fold(0.0, (s, i) => s + i.qty),
                               onTap: () => _addProductToOrder(p),
                               onDecrease: () => _decreaseProductFromOrder(p),
@@ -899,69 +1008,70 @@ Future<void> _printBill(Bill bill) async {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (widget.table.id.isNotEmpty && _items.isNotEmpty && _status != TableStatus.empty) ...[
-                    if (_generatedBill == null)
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: kGreen,
-                          side: const BorderSide(color: kGreen),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        onPressed: _generatingBill ? null : _generateBill,
-                        icon: _generatingBill
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kGreen))
-                            : const Icon(Icons.receipt_long_rounded, size: 18),
-                        label: const Text('Generate Bill', style: TextStyle(fontWeight: FontWeight.w600)),
-                      )
-                    else ...[
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: kBlue,
-                          side: const BorderSide(color: kBlue),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        onPressed: _printing ? null : () => _printBill(_generatedBill!),
-                        icon: _printing
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kBlue))
-                            : const Icon(Icons.print_rounded, size: 18),
-                        label: const Text('Print Bill', style: TextStyle(fontWeight: FontWeight.w600)),
+                  if (widget.table.id.isNotEmpty && _items.isNotEmpty) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPurple,
+                        foregroundColor: kWhite,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: kOrange,
-                          side: const BorderSide(color: kOrange),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        onPressed: _startNewBill,
-                        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                        label: const Text('New Bill', style: TextStyle(fontWeight: FontWeight.w600)),
+                      onPressed: _busyPrinting ? null : _handlePrintKOT,
+                      icon: const Icon(Icons.restaurant_rounded, size: 18),
+                      label: const Text('Print KOT', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kGreen,
+                        foregroundColor: kWhite,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                    ],
+                      onPressed: _busyPrinting ? null : _handlePrintBill,
+                      icon: const Icon(Icons.print_rounded, size: 18),
+                      label: const Text('Print Bill', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kOrange,
+                        foregroundColor: kWhite,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      onPressed: _busyPrinting ? null : _handleKOTAndBill,
+                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                      label: const Text('KOT & Bill', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
                   ],
                   const Spacer(),
                   OutlinedButton(
-                    style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Obx(() => ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: kBlue, foregroundColor: kWhite, elevation: 0,
+                          backgroundColor: kBlue,
+                          foregroundColor: kWhite,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         ),
-                        icon: widget.controller.isSaving.value
+                        icon: widget.controller.isSaving.value || _busyPrinting
                             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kWhite))
                             : const Icon(Icons.save_rounded, size: 18),
-                        label: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
-                        onPressed: widget.controller.isSaving.value ? null : _save,
+                        label: const Text('Save Order', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: widget.controller.isSaving.value || _busyPrinting ? null : _save,
                       )),
                 ],
               ),

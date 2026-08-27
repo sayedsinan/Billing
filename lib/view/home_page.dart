@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/models/nav_item.dart';
+import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/attendance/attendance_page.dart';
 import 'package:test_bill/view/billing/billing_page.dart';
 import 'package:test_bill/view/customers/customers_page.dart';
@@ -85,64 +86,93 @@ class _HomePageState extends State<HomePage> {
                 // Logo header
                 Container(
                   height: 70,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.symmetric(horizontal: _sidebarCollapsed ? 8 : 16),
                   decoration: const BoxDecoration(color: Color(0xFF122540)),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.kBlue,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.receipt_rounded,
-                          color: AppColors.kWhite,
-                          size: 22,
-                        ),
-                      ),
-                      if (!_sidebarCollapsed) ...[
-                        const SizedBox(width: 12),
-                        const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Smart Billing',
-                              style: TextStyle(
-                                color: AppColors.kWhite,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                letterSpacing: 0.3,
+                  child: _sidebarCollapsed
+                      ? Center(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => setState(
+                              () => _sidebarCollapsed = !_sidebarCollapsed,
+                            ),
+                            child: Tooltip(
+                              message: 'Expand Sidebar',
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: AppColors.kBlue,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.kWhite,
+                                  size: 24,
+                                ),
                               ),
                             ),
-                            Text(
-                              'Bill Today, Grow Tomorrow',
-                              style: TextStyle(
-                                color: AppColors.kSidebarText,
-                                fontSize: 9,
-                                letterSpacing: 0.2,
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: AppColors.kBlue,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.receipt_rounded,
+                                color: AppColors.kWhite,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Smart Billing',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: AppColors.kWhite,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Bill Today, Grow Tomorrow',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: AppColors.kSidebarText,
+                                      fontSize: 9,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => setState(
+                                () => _sidebarCollapsed = !_sidebarCollapsed,
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.chevron_left_rounded,
+                                  color: AppColors.kSidebarText,
+                                  size: 22,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => setState(
-                          () => _sidebarCollapsed = !_sidebarCollapsed,
-                        ),
-                        child: Icon(
-                          _sidebarCollapsed
-                              ? Icons.chevron_right_rounded
-                              : Icons.chevron_left_rounded,
-                          color: AppColors.kSidebarText,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
 
                 const SizedBox(height: 12),

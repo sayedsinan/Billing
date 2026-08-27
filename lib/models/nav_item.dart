@@ -15,6 +15,6 @@ const kNavItems = [
   NavItem(Icons.people_rounded, 'Customers'),
   NavItem(Icons.local_offer_rounded, 'Products'),
   NavItem(Icons.swap_horiz_rounded, 'Transactions'),
-  NavItem(Icons.support_agent_rounded, 'Support'),
+  NavItem(Icons.badge_rounded, 'Employees'),
   NavItem(Icons.settings_rounded, 'Settings'),
 ];

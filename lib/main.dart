@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/controller/bill_controller.dart';
+import 'package:test_bill/controller/employee_controller.dart';
 import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/controller/table_controller.dart';
+import 'package:test_bill/controller/transaction_controller.dart';
 import 'package:test_bill/view/login/login_screen.dart';
 import 'package:get/get.dart';
 
@@ -11,6 +13,8 @@ void main() {
   Get.lazyPut(() => AuthController());
   Get.lazyPut(() => TableController());
   Get.lazyPut(() => BillController());
+  Get.lazyPut(() => TransactionController());
+  Get.lazyPut(() => EmployeeController());
   runApp(const MyApp());
 }
 

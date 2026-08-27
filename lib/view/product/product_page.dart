@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/models/product_model.dart';
-import 'package:test_bill/view/attendance/attendance_page.dart';
+import 'package:test_bill/theme/colors.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
