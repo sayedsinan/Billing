@@ -60,9 +60,9 @@ class ApiService {
   static const _tokenKey = 'auth_token';
 
   //Production
-  static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
+  // static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
   //Development
-  // static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://localhost:3000/api';
 
   // ── Token management ──────────────────────────────────────────────────
   String? get token => _box.read<String>(_tokenKey);
@@ -240,7 +240,7 @@ class ApiService {
     required List<Map<String, dynamic>>
     items, // [{productId, qty}] or [{name, qty, rate}]
     String? customerName,
-    double taxRate = 5,
+    double taxRate = 0,
     double discount = 0,
   }) async {
     final data = await _request(
@@ -260,7 +260,7 @@ class ApiService {
   /// Bill generated from a restaurant table's current order.
   Future<Map<String, dynamic>> generateTableBill(
     String tableId, {
-    double taxRate = 5,
+    double taxRate = 0,
     double discount = 0,
   }) async {
     final data = await _request(

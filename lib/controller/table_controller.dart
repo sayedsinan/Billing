@@ -97,7 +97,7 @@ class TableController extends GetxController {
   /// Generates a bill for the table's current order. On success the table is
   /// flipped to `billing` locally (server does the same) so the UI reflects
   /// it immediately without a full refetch.
-  Future<Bill?> generateBill(String tableMongoId, {double taxRate = 5, double discount = 0}) async {
+  Future<Bill?> generateBill(String tableMongoId, {double taxRate = 0, double discount = 0}) async {
     try {
       final data = await _api.generateTableBill(tableMongoId, taxRate: taxRate, discount: discount);
       final bill = Bill.fromJson(data);

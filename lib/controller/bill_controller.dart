@@ -10,7 +10,7 @@ class BillController extends GetxController {
 
   // ── Cart (running order before checkout) ────────────────────────────
   final RxList<CartItem> cart = <CartItem>[].obs;
-  final RxDouble taxRate = 5.0.obs; // percent
+  final RxDouble taxRate = 0.0.obs; // percent
   final RxDouble discount = 0.0.obs;
   final RxBool isDeleting = false.obs;
 

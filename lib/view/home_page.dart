@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/models/nav_item.dart';
 import 'package:test_bill/view/attendance/attendance_page.dart';
 import 'package:test_bill/view/billing/billing_page.dart';
-
+import 'package:test_bill/view/customers/customers_page.dart';
+import 'package:test_bill/view/login/login_screen.dart';
 import 'package:test_bill/view/product/product_page.dart';
 import 'package:test_bill/view/reports/reports_page.dart';
+import 'package:test_bill/view/settings/settings_page.dart';
 import 'package:test_bill/view/stock/stock_page.dart';
+import 'package:test_bill/view/transactions/transactions_page.dart';
 import 'package:test_bill/view/widgets/dashboard_content.dart';
 import 'package:test_bill/view/widgets/nav_tile.dart';
-import 'package:test_bill/view/widgets/placeholder.dart';
 import 'package:test_bill/view/widgets/top_bar.dart';
 
 import '../core/constants/colors.dart';
@@ -23,6 +27,37 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   bool _sidebarCollapsed = false;
+  final AuthController _authController = Get.find<AuthController>();
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Log Out?', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Are you sure you want to log out of your session?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.kRed,
+              foregroundColor: AppColors.kWhite,
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _authController.logout();
+              Get.offAll(() => const LoginPage());
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +65,7 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: AppColors.kBgGray,
       body: Row(
         children: [
+          // ── Sidebar ──────────────────────────────────────────────────
           AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeInOut,
@@ -133,101 +169,117 @@ class _HomePageState extends State<HomePage> {
                 ),
 
                 // Bottom user card
-                if (!_sidebarCollapsed)
-                  Container(
-                    margin: const EdgeInsets.all(12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F2035),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: AppColors.kBlue.withOpacity(0.2),
-                          child: const Text(
-                            'A',
-                            style: TextStyle(
-                              color: AppColors.kBlue,
-                              fontWeight: FontWeight.bold,
+                Obx(() {
+                  final user = _authController.currentUser.value;
+                  final userName = user?['name']?.toString() ?? 'Admin';
+                  final userRole = user?['role']?.toString().toUpperCase() ?? 'STAFF';
+
+                  if (!_sidebarCollapsed) {
+                    return Container(
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F2035),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppColors.kBlue.withOpacity(0.2),
+                            child: Text(
+                              userName.isNotEmpty ? userName[0].toUpperCase() : 'A',
+                              style: const TextStyle(
+                                color: AppColors.kBlue,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Admin',
-                                style: TextStyle(
-                                  color: AppColors.kWhite,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  userName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.kWhite,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Super Admin',
-                                style: TextStyle(
-                                  color: AppColors.kSidebarText,
-                                  fontSize: 11,
+                                Text(
+                                  userRole,
+                                  style: const TextStyle(
+                                    color: AppColors.kSidebarText,
+                                    fontSize: 10,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _confirmLogout,
+                            icon: const Icon(
+                              Icons.logout_rounded,
+                              color: AppColors.kSidebarText,
+                              size: 18,
+                            ),
+                            tooltip: 'Logout',
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: IconButton(
+                      onPressed: _confirmLogout,
+                      icon: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.kBlue.withOpacity(0.2),
+                        child: Text(
+                          userName.isNotEmpty ? userName[0].toUpperCase() : 'A',
+                          style: const TextStyle(
+                            color: AppColors.kBlue,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const Icon(
-                          Icons.logout_rounded,
-                          color: AppColors.kSidebarText,
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundColor:AppColors. kBlue.withOpacity(0.2),
-                      child: const Text(
-                        'A',
-                        style: TextStyle(
-                          color: AppColors.kBlue,
-                          fontWeight: FontWeight.bold,
-                        ),
                       ),
+                      tooltip: 'Logout',
                     ),
-                  ),
+                  );
+                }),
               ],
             ),
           ),
+
+          // ── Main Page View with IndexedStack for Zero-Lag Navigation ─────
           Expanded(
             child: Column(
               children: [
-                // Top bar
                 TopBar(title: kNavItems[_selectedIndex].label),
-                // Page body
                 Expanded(
-                  child: _selectedIndex == 0
-                      ? const DashboardContent()
-                      : _selectedIndex == 1
-                      ? const TableOrderPage()
-                      : _selectedIndex == 2
-                      ? const StockPage()
-                      :   _selectedIndex == 3
-                      ? const ReportsPage()
-                      : _selectedIndex == 5
-                      ? const ProductsPage()
-                       : _selectedIndex == 7
-                      ? const AttendancePage()
-                      : PlaceholderContent(
-                          label: kNavItems[_selectedIndex].label,
-                        ),
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: const [
+                      DashboardContent(),  // Index 0
+                      TableOrderPage(),    // Index 1
+                      StockPage(),         // Index 2
+                      ReportsPage(),       // Index 3
+                      CustomersPage(),     // Index 4
+                      ProductsPage(),      // Index 5
+                      TransactionsPage(),  // Index 6
+                      AttendancePage(),    // Index 7
+                      SettingsPage(),      // Index 8
+                    ],
+                  ),
                 ),
               ],
             ),

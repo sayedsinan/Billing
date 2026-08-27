@@ -745,7 +745,7 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
                     const SizedBox(height: 18),
 
                     _totalRow('Subtotal', bill.subtotal),
-                    _totalRow('Tax (${bill.taxRate.toStringAsFixed(0)}%)', bill.taxAmount),
+                    if (bill.taxAmount > 0) _totalRow('Tax (${bill.taxRate.toStringAsFixed(0)}%)', bill.taxAmount),
                     if (bill.discount > 0) _totalRow('Discount', -bill.discount, color: kRed),
                     const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
                     _totalRow('Grand Total', bill.grandTotal, bold: true, large: true),
