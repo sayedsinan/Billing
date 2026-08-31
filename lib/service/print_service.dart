@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:windows_printer/windows_printer.dart';
 
 import 'package:test_bill/models/bill_model.dart';
+import 'package:test_bill/models/table_model.dart';
 
 /// Thrown when a print job can't be sent (no printer, driver error, etc.)
 class PrintException implements Exception {
@@ -32,8 +34,16 @@ class PrintService {
   // ── Rounds a price for display — 29.99 -> 30 ──
   String _money(double amount) => amount.round().toString();
   // ── Printer selection ──────────────────────────────────────────────
-  Future<List<String>> getAvailablePrinters() =>
-      WindowsPrinter.getAvailablePrinters();
+  Future<List<String>> getAvailablePrinters() async {
+    if (!GetPlatform.isWindows) {
+      return [];
+    }
+    try {
+      return await WindowsPrinter.getAvailablePrinters();
+    } catch (_) {
+      return [];
+    }
+  }
 
   String? get savedPrinter => _box.read<String>(_printerKey);
 
@@ -55,8 +65,12 @@ class PrintService {
   /// Pass [printerName] to force a specific printer; otherwise the saved /
   /// default one is used. Throws [PrintException] on failure.
   Future<void> printBill(Bill bill, {String? printerName}) async {
+    if (!GetPlatform.isWindows) {
+      debugPrint("Direct thermal printing is only supported on Windows.");
+      return;
+    }
     final target = printerName ?? await resolvePrinter();
-    final printers = await WindowsPrinter.getAvailablePrinters();
+    final printers = await getAvailablePrinters();
 
     for (final printer in printers) {
       print(printer);
@@ -112,14 +126,12 @@ class PrintService {
     builder.separator();
 
     builder.line('ITEMS', style: centerBold);
-    builder.blank();
     for (final item in bill.items) {
       final qtyLabel = item.qty == item.qty.roundToDouble()
           ? item.qty.toInt().toString()
           : item.qty.toString();
       builder.item('${item.name} x$qtyLabel', _money(item.total));
     }
-    builder.blank();
 
     builder.separator();
     builder.item('Subtotal', _money(bill.subtotal));
@@ -136,12 +148,16 @@ class PrintService {
     builder.separator();
     builder.line(footerLine, style: centerBold);
     builder.line('Please visit again', style: centerItalic);
-    builder.blank();
-    builder.blank();
-    builder.blank();
-    builder.cut();
+    _cutPaper(builder);
 
     return Uint8List.fromList(builder.build());
+  }
+
+  /// Single cut helper — feeds ~5cm of paper before cut command (GS V 1)
+  /// so both Bill and KOT receipts have an extra 5cm height.
+  void _cutPaper(WPReceiptBuilder builder) {
+    builder.blank(6);
+    builder.raw([0x1D, 0x56, 0x01]);
   }
 
   /// Sends bill to printer twice: normal customer copy + kitchen copy (no prices).
@@ -150,13 +166,43 @@ class PrintService {
     await printKitchenBill(bill, printerName: printerName);
   }
 
+  /// Print Kitchen Order Ticket (KOT) directly from table order items
+  Future<void> printKOT({
+    required String tableId,
+    required String waiter,
+    required List<OrderItem> items,
+    String? printerName,
+  }) async {
+    final subtotal = items.fold(0.0, (s, i) => s + i.total);
+    final kotBill = Bill(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      billNumber: 'KOT-$tableId-${DateTime.now().minute}${DateTime.now().second}',
+      source: 'table',
+      tableId: tableId,
+      waiter: waiter,
+      items: items.map((i) => BillItem(name: i.name, qty: i.qty, rate: i.rate, total: i.total)).toList(),
+      subtotal: subtotal,
+      taxRate: 0.0,
+      taxAmount: 0.0,
+      discount: 0.0,
+      grandTotal: subtotal,
+      paymentMethod: 'KOT',
+      status: BillStatus.pending,
+      createdAt: DateTime.now(),
+    );
+    await printKitchenBill(kotBill, printerName: printerName);
+  }
+
   /// Kitchen Order Ticket — item names + qty only, no prices/totals.
   Future<void> printKitchenBill(Bill bill, {String? printerName}) async {
+    if (!GetPlatform.isWindows) {
+      debugPrint("KOT request sent to central server for Table ${bill.tableId}.");
+      return;
+    }
     final target = printerName ?? await resolvePrinter();
     if (target == null) {
-      throw PrintException(
-        'No printer found. Make sure your thermal printer is connected and installed in Windows.',
-      );
+      debugPrint('No thermal printer connected. KOT logged for Table ${bill.tableId}.');
+      return;
     }
 
     final bytes = _buildKitchenReceiptBytes(bill);
@@ -168,9 +214,7 @@ class PrintService {
         useRawDatatype: true,
       );
     } catch (e) {
-      throw PrintException(
-        'Could not print kitchen bill ${bill.billNumber}: $e',
-      );
+      debugPrint('Printer offline or error printing KOT for bill ${bill.billNumber}: $e');
     }
   }
 
@@ -197,7 +241,6 @@ class PrintService {
     }
     builder.separator();
     builder.line('ITEMS', style: centerBold);
-    builder.blank();
 
     for (final item in bill.items) {
       final qtyLabel = item.qty == item.qty.roundToDouble()
@@ -206,12 +249,8 @@ class PrintService {
       builder.line('$qtyLabel x ${item.name}', style: itemStyle);
     }
 
-    builder.blank();
     builder.separator();
-    builder.blank();
-    builder.blank();
-    builder.blank();
-    builder.cut();
+    _cutPaper(builder);
 
     final bytes = Uint8List.fromList(builder.build());
 

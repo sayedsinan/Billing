@@ -58,11 +58,42 @@ class ApiService {
   late final Dio _dio;
   final GetStorage _box = GetStorage();
   static const _tokenKey = 'auth_token';
+  static const _serverIpKey = 'server_ip';
 
-  //Production
-  // static const String baseUrl = 'https://billing-backend-hd2t.onrender.com/api';
-  //Development
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String productionUrl = 'https://billing-backend-hd2t.onrender.com/api';
+  static const String _defaultBaseUrl = productionUrl;
+
+  String get baseUrl {
+    final customIp = _box.read<String>(_serverIpKey);
+    if (customIp != null && customIp.trim().isNotEmpty) {
+      String formatted = customIp.trim();
+      if (formatted == productionUrl || formatted == 'cloud') {
+        return productionUrl;
+      }
+      if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
+        formatted = 'http://$formatted';
+      }
+      if (!formatted.startsWith('https://') && !formatted.contains(':', formatted.indexOf('//') + 2)) {
+        formatted = '$formatted:3000';
+      }
+      if (!formatted.endsWith('/api')) {
+        formatted = '$formatted/api';
+      }
+      return formatted;
+    }
+    return _defaultBaseUrl;
+  }
+
+  void saveServerIp(String ip) {
+    if (ip.trim().isEmpty) {
+      _box.remove(_serverIpKey);
+    } else {
+      _box.write(_serverIpKey, ip.trim());
+    }
+    _dio.options.baseUrl = baseUrl;
+  }
+
+  String getServerIp() => _box.read<String>(_serverIpKey) ?? '';
 
   // ── Token management ──────────────────────────────────────────────────
   String? get token => _box.read<String>(_tokenKey);

@@ -7,6 +7,7 @@ import 'package:test_bill/view/attendance/attendance_page.dart';
 import 'package:test_bill/view/billing/billing_page.dart';
 import 'package:test_bill/view/customers/customers_page.dart';
 import 'package:test_bill/view/login/login_screen.dart';
+import 'package:test_bill/view/mobile/waiter_mobile_page.dart';
 import 'package:test_bill/view/product/product_page.dart';
 import 'package:test_bill/view/reports/reports_page.dart';
 import 'package:test_bill/view/settings/settings_page.dart';
@@ -62,7 +63,17 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Obx(() {
+      final user = _authController.currentUser.value;
+      final role = user?['role']?.toString().toLowerCase() ?? '';
+      final targetMode = _authController.targetMode.value;
+
+      // Route to WaiterMobilePage only when targetMode is waiter
+      if (targetMode == 'waiter') {
+        return const WaiterMobilePage();
+      }
+
+      return Scaffold(
       backgroundColor: AppColors.kBgGray,
       body: Row(
         children: [
@@ -314,8 +325,9 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-        ],
+               ],
       ),
     );
+    });
   }
 }

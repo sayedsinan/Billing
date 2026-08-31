@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/billing/billing_page.dart';
+import 'package:test_bill/view/mobile/waiter_mobile_page.dart';
 
 class TopBar extends StatelessWidget {
   final String title;
@@ -62,6 +63,24 @@ class TopBar extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(width: 10),
+          // Waiter Mobile View CTA
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: kBlue,
+              side: const BorderSide(color: kBlue),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            icon: const Icon(Icons.touch_app_rounded, size: 18),
+            label: const Text('Waiter App Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WaiterMobilePage()),
+              );
+            },
           ),
           const SizedBox(width: 10),
           // New Bill CTA

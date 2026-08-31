@@ -12,6 +12,7 @@ class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
   final Rxn<Map<String, dynamic>> currentUser = Rxn<Map<String, dynamic>>();
+  final RxString targetMode = 'admin'.obs; // 'admin' or 'waiter'
 
   bool get isLoggedIn => _api.isLoggedIn;
 
@@ -61,6 +62,7 @@ class AuthController extends GetxController {
       currentUser.value = (data['user'] is Map)
           ? Map<String, dynamic>.from(data['user'])
           : data;
+
       passwordController.clear();
       return true;
     } on ApiException catch (e) {
@@ -72,11 +74,11 @@ class AuthController extends GetxController {
   }
 
   Future<bool> register({String? role}) async {
-    final name = "grillo";
-    final email = "grillo@gmail.com";
-    final password = "123456";
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      errorMessage.value = 'Fill in all fields';
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    final name = email.isNotEmpty && email.contains('@') ? email.split('@').first : email;
+    if (email.isEmpty || password.isEmpty) {
+      errorMessage.value = 'Enter email and password to register';
       return false;
     }
 
