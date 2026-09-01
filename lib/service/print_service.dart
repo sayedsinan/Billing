@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -215,6 +216,23 @@ class PrintService {
       );
     } catch (e) {
       debugPrint('Printer offline or error printing KOT for bill ${bill.billNumber}: $e');
+    }
+  }
+
+  /// Print raw ESC/POS bytes directly over Wi-Fi network socket to an IP printer (TCP Port 9100)
+  Future<void> printOverNetwork({
+    required String ipAddress,
+    required Uint8List bytes,
+    int port = 9100,
+  }) async {
+    try {
+      final socket = await Socket.connect(ipAddress, port, timeout: const Duration(seconds: 4));
+      socket.add(bytes);
+      await socket.flush();
+      await socket.close();
+      debugPrint("Printed successfully over Wi-Fi network socket to $ipAddress:$port");
+    } catch (e) {
+      debugPrint("Wi-Fi network socket print note ($ipAddress:$port): $e");
     }
   }
 

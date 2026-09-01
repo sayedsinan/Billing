@@ -55,8 +55,8 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
     super.dispose();
   }
 
-  void _syncDraftItemsWithTable(DiningTable table) {
-    if (!_draftOrders.containsKey(table.id)) {
+  void _syncDraftItemsWithTable(DiningTable table, {bool force = false}) {
+    if (force || !_draftOrders.containsKey(table.id)) {
       _draftOrders[table.id] = table.items
           .map((i) => OrderItem(name: i.name, qty: i.qty, rate: i.rate))
           .toList();
@@ -113,13 +113,27 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
     final currentDraft = _currentTableItems;
     final tableWithDrafts = _selectedTable!.copyWith(items: currentDraft);
 
-    showModalBottomSheet(
+    showModalBottomSheet<List<OrderItem>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => WaiterOrderSheet(table: tableWithDrafts),
-    ).then((_) {
-      _tableController.fetchTables();
+    ).then((updatedItems) {
+      if (updatedItems != null && _selectedTable != null) {
+        setState(() {
+          _draftOrders[_selectedTable!.id] = updatedItems;
+        });
+      }
+      _tableController.fetchTables().then((_) {
+        if (_selectedTable != null) {
+          final refreshed = _tableController.tables.firstWhereOrNull((t) => t.id == _selectedTable!.id);
+          if (refreshed != null) {
+            setState(() {
+              _selectedTable = refreshed;
+            });
+          }
+        }
+      });
     });
   }
 
@@ -241,7 +255,21 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                     },
                   ),
                   const Spacer(),
-                  if (_selectedTable != null)
+                  if (_selectedTable != null) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.kBlue,
+                        side: const BorderSide(color: AppColors.kBlue),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: _openOrderReviewSheet,
+                      icon: const Icon(Icons.receipt_long_rounded, size: 14),
+                      label: const Text('View Order', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -257,6 +285,7 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             );
@@ -308,7 +337,7 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Table ${_selectedTable!.tableId} Cart',
+                            'Table ${_selectedTable!.tableId} Order',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -322,11 +351,23 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                         ],
                       ),
                     ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white38),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: _openOrderReviewSheet,
+                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                      label: const Text('View Order', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.kGreen,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: _openOrderReviewSheet,
@@ -374,7 +415,7 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.25,
+            childAspectRatio: 1.05,
           ),
           itemCount: tables.length,
           itemBuilder: (ctx, i) {
@@ -388,7 +429,7 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                   _selectedTable = t;
                   _syncDraftItemsWithTable(t);
                 });
-                _tabController.animateTo(1); // Switch to ordering view
+                _openOrderReviewSheet();
               },
               borderRadius: BorderRadius.circular(16),
               child: Container(
@@ -455,7 +496,45 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                             color: AppColors.kBlue,
                           ),
                         ),
-                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.kSubtext),
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedTable = t;
+                                  _syncDraftItemsWithTable(t);
+                                });
+                                _tabController.animateTo(1);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.kBlue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.add_rounded, size: 16, color: AppColors.kBlue),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedTable = t;
+                                  _syncDraftItemsWithTable(t);
+                                });
+                                _openOrderReviewSheet();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.receipt_long_rounded, size: 16, color: Colors.orange.shade800),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ],

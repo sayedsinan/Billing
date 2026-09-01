@@ -8,6 +8,7 @@ import 'package:test_bill/models/table_model.dart'; // for OrderItem
 import 'package:test_bill/service/api_service.dart';
 import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/theme/colors.dart';
+import 'package:test_bill/view/widgets/bill_receipt_preview.dart';
 
 /// A takeout / counter bill: no table involved. Browse the product catalog
 /// as tappable blocks (same UI as the table order dialog), generate + print
@@ -29,6 +30,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   bool _generating = false;
   bool _printing = false;
   Bill? _generatedBill;
+  bool _previewKOT = false;
 
   @override
   void initState() {
@@ -177,8 +179,9 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
     setState(() => _busyPrinting = true);
     try {
-      final bill = await _createDirectBill(validItems);
+      final bill = _generatedBill ?? await _createDirectBill(validItems);
       if (bill != null) {
+        _generatedBill = bill;
         await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
         await PrintService.instance.printBill(bill);
         _resetForNewOrder();
@@ -227,8 +230,9 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
     setState(() => _busyPrinting = true);
     try {
-      final bill = await _createDirectBill(validItems);
+      final bill = _generatedBill ?? await _createDirectBill(validItems);
       if (bill != null) {
+        _generatedBill = bill;
         await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
         await PrintService.instance.printBillWithKOT(bill);
         _resetForNewOrder();
@@ -265,8 +269,8 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SizedBox(
-        width: 820,
-        height: MediaQuery.of(context).size.height * 0.85,
+        width: 1160,
+        height: MediaQuery.of(context).size.height * 0.88,
         child: Column(
           mainAxisSize: MainAxisSize.max,
           children: [
@@ -301,315 +305,411 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
 
             // Body
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Customer Name (optional)',
-                      style: TextStyle(
-                        color: kTextGray,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _customerNameCtrl,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Walk-in / Ravi',
-                        hintStyle: const TextStyle(
-                          color: kTextGray,
-                          fontSize: 13,
-                        ),
-                        filled: true,
-                        fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    const Text(
-                      'Order Items',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: kTextDark,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ── Optional search to narrow the block grid below ──
-                    TextField(
-                      controller: _productSearchCtrl,
-                      decoration: InputDecoration(
-                        hintText:
-                            'Search products (optional) — or just tap a block below...',
-                        hintStyle: const TextStyle(
-                          color: kTextGray,
-                          fontSize: 13,
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.search_rounded,
-                          color: kTextGray,
-                          size: 18,
-                        ),
-                        filled: true,
-                        fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      onChanged: (v) => setState(() => _productQuery = v),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ── Tappable product blocks — browse & tap, no typing needed ──
-                    Obx(() {
-                      final products = _productController.products;
-                      final q = _productQuery.toLowerCase();
-                      final matches = q.isEmpty
-                          ? products
-                          : products
-                                .where((p) => p.name.toLowerCase().contains(q))
-                                .toList();
-
-                      if (_productController.isLoading.value &&
-                          products.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: CircularProgressIndicator(color: kOrange),
-                          ),
-                        );
-                      }
-
-                      if (matches.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            products.isEmpty
-                                ? 'No products in catalog yet'
-                                : 'No products match "$_productQuery"',
-                            style: const TextStyle(
-                              color: kTextGray,
-                              fontSize: 12,
-                            ),
-                          ),
-                        );
-                      }
-
-                      return Container(
-                        padding: const EdgeInsets.all(10),
-                        constraints: const BoxConstraints(maxHeight: 320),
-                        decoration: BoxDecoration(
-                          color: kBgGray,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: matches
-                                .map(
-                                  (p) => _TakeoutProductBlock(
-                                    product: p,
-                                    qtyInOrder: _items
-                                        .where((i) => i.name == p.name && i.rate == p.price)
-                                        .fold(0.0, (s, i) => s + i.qty),
-                                    onTap: () => _addProductToOrder(p),
-                                    onDecrease: () =>
-                                        _decreaseProductFromOrder(p),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 20),
-
-                    Row(
-                      children: [
-                        const Text(
-                          'Bill Lines',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: kTextDark,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () => setState(
-                            () => _items.add(
-                              OrderItem(name: '', qty: 1, rate: 0),
-                            ),
-                          ),
-                          icon: const Icon(Icons.add_rounded, size: 16),
-                          label: const Text('Custom Item'),
-                          style: TextButton.styleFrom(foregroundColor: kOrange),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    if (_items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          'No items ordered yet — tap a product block above to add',
-                          style: TextStyle(color: kTextGray, fontSize: 13),
-                        ),
-                      )
-                    else ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: kBgGray,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
+                    // Left Column: Takeout Builder
+                    Expanded(
+                      flex: 6,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              flex: 5,
-                              child: Text(
-                                'Item Name',
-                                style: TextStyle(
+                            const Text(
+                              'Customer Name (optional)',
+                              style: TextStyle(
+                                color: kTextGray,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _customerNameCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Walk-in / Ravi',
+                                hintStyle: const TextStyle(
                                   color: kTextGray,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                                filled: true,
+                                fillColor: kBgGray,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
-                            SizedBox(width: 8),
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                'Qty',
-                                style: TextStyle(
-                                  color: kTextGray,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            const SizedBox(height: 20),
+
+                            const Text(
+                              'Order Items',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: kTextDark,
+                                fontSize: 14,
                               ),
                             ),
-                            SizedBox(width: 8),
-                            SizedBox(
-                              width: 90,
-                              child: Text(
-                                'Rate (₹)',
-                                style: TextStyle(
+                            const SizedBox(height: 8),
+
+                            // ── Optional search to narrow the block grid below ──
+                            TextField(
+                              controller: _productSearchCtrl,
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Search products (optional) — or just tap a block below...',
+                                hintStyle: const TextStyle(
                                   color: kTextGray,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  color: kTextGray,
+                                  size: 18,
+                                ),
+                                filled: true,
+                                fillColor: kBgGray,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                  horizontal: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
+                              onChanged: (v) => setState(() => _productQuery = v),
                             ),
-                            SizedBox(width: 8),
-                            SizedBox(
-                              width: 90,
-                              child: Text(
-                                'Total',
-                                style: TextStyle(
-                                  color: kTextGray,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                            const SizedBox(height: 10),
+
+                            // ── Tappable product blocks — browse & tap, no typing needed ──
+                            Obx(() {
+                              final products = _productController.products;
+                              final q = _productQuery.toLowerCase();
+                              final matches = q.isEmpty
+                                  ? products
+                                  : products
+                                        .where((p) => p.name.toLowerCase().contains(q))
+                                        .toList();
+
+                              if (_productController.isLoading.value &&
+                                  products.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(
+                                    child: CircularProgressIndicator(color: kOrange),
+                                  ),
+                                );
+                              }
+
+                              if (matches.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: Text(
+                                    products.isEmpty
+                                        ? 'No products in catalog yet'
+                                        : 'No products match "$_productQuery"',
+                                    style: const TextStyle(
+                                      color: kTextGray,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return Container(
+                                padding: const EdgeInsets.all(10),
+                                constraints: const BoxConstraints(maxHeight: 280),
+                                decoration: BoxDecoration(
+                                  color: kBgGray,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: SingleChildScrollView(
+                                  child: Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: matches
+                                        .map(
+                                          (p) => _TakeoutProductBlock(
+                                            product: p,
+                                            qtyInOrder: _items
+                                                .where((i) => i.name == p.name && i.rate == p.price)
+                                                .fold(0.0, (s, i) => s + i.qty),
+                                            onTap: () => _addProductToOrder(p),
+                                            onDecrease: () =>
+                                                _decreaseProductFromOrder(p),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 20),
+
+                            Row(
+                              children: [
+                                const Text(
+                                  'Bill Lines',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: kTextDark,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const Spacer(),
+                                TextButton.icon(
+                                  onPressed: () => setState(
+                                    () => _items.add(
+                                      OrderItem(name: '', qty: 1, rate: 0),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.add_rounded, size: 16),
+                                  label: const Text('Custom Item'),
+                                  style: TextButton.styleFrom(foregroundColor: kOrange),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+
+                            if (_items.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Text(
+                                  'No items ordered yet — tap a product block above to add',
+                                  style: TextStyle(color: kTextGray, fontSize: 13),
+                                ),
+                              )
+                            else ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kBgGray,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 5,
+                                      child: Text(
+                                        'Item Name',
+                                        style: TextStyle(
+                                          color: kTextGray,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 70,
+                                      child: Text(
+                                        'Qty',
+                                        style: TextStyle(
+                                          color: kTextGray,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 90,
+                                      child: Text(
+                                        'Rate (₹)',
+                                        style: TextStyle(
+                                          color: kTextGray,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 90,
+                                      child: Text(
+                                        'Total',
+                                        style: TextStyle(
+                                          color: kTextGray,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 32),
+                                  ],
                                 ),
                               ),
+                              const SizedBox(height: 6),
+                              ...List.generate(
+                                _items.length,
+                                (i) => _TakeoutItemRow(
+                                  key: ValueKey('takeout_item_$i-${_items[i].name}'),
+                                  item: _items[i],
+                                  onChanged: (item) => setState(() => _items[i] = item),
+                                  onDelete: () => setState(() => _items.removeAt(i)),
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: kLightBlue,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Order Total',
+                                    style: TextStyle(
+                                      color: kTextGray,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${_subtotal.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: kTextDark,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            SizedBox(width: 32),
+
+                            if (_generatedBill != null) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: kGreen.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: kGreen,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Bill #${_generatedBill!.billNumber} generated. You can print again or start a new one.',
+                                        style: const TextStyle(
+                                          color: kGreen,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      ...List.generate(
-                        _items.length,
-                        (i) => _TakeoutItemRow(
-                          key: ValueKey('takeout_item_$i-${_items[i].name}'),
-                          item: _items[i],
-                          onChanged: (item) => setState(() => _items[i] = item),
-                          onDelete: () => setState(() => _items.removeAt(i)),
-                        ),
-                      ),
-                    ],
+                    ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(width: 20),
+
+                    // Right Column: Live Thermal Receipt Preview
                     Container(
+                      width: 340,
+                      height: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: kLightBlue,
-                        borderRadius: BorderRadius.circular(12),
+                        color: kBgGray,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.06)),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Order Total',
-                            style: TextStyle(
-                              color: kTextGray,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            '₹${_subtotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: kTextDark,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    if (_generatedBill != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: kGreen.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.check_circle_rounded,
-                              color: kGreen,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Bill #${_generatedBill!.billNumber} generated. You can print again or start a new one.',
-                                style: const TextStyle(
-                                  color: kGreen,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            // Switcher: [Receipt Preview] | [KOT Preview]
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.black12),
                               ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _previewKOT = false),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: !_previewKOT ? kOrange : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'Receipt Preview',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: !_previewKOT ? kWhite : kTextGray,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _previewKOT = true),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: _previewKOT ? kPurple : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'KOT Preview',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: _previewKOT ? kWhite : kTextGray,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            BillReceiptPreview(
+                              customerName: _customerNameCtrl.text.trim(),
+                              billNumber: _generatedBill?.billNumber,
+                              items: _items,
+                              subtotal: _subtotal,
+                              grandTotal: _subtotal,
+                              isKOT: _previewKOT,
                             ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),

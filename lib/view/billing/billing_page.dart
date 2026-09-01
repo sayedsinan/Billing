@@ -11,6 +11,7 @@ import 'package:test_bill/service/api_service.dart';
 import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/billing/takeout_bill_dialog.dart';
+import 'package:test_bill/view/widgets/bill_receipt_preview.dart';
 
 // ─── Table Order Page ──────────────────────────────────────────────────────────
 class TableOrderPage extends StatefulWidget {
@@ -110,11 +111,25 @@ class _TableOrderPageState extends State<TableOrderPage> {
                     const SizedBox(width: 6),
                     _FilterChip('Cleaning', _filterStatus == TableStatus.cleaning, () => setState(() => _filterStatus = TableStatus.cleaning), color: kTextGray),
                     const Spacer(),
-                    if (loading)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 12),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kBlue)),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kBlue,
+                        side: const BorderSide(color: kBlue),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
+                      icon: loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: kBlue),
+                            )
+                          : const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Refresh', style: TextStyle(fontWeight: FontWeight.w600)),
+                      onPressed: loading ? null : () => controller.fetchTables(),
+                    ),
+                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kBlue,
@@ -528,6 +543,7 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
   DateTime? _occupiedSince;
   bool _generatingBill = false;
   bool _printing = false;
+  bool _previewKOT = false;
 
   /// Set once "Generate Bill" succeeds. While this is non-null the footer
   /// switches from "Generate Bill" to "Print Bill" / "New Bill".
@@ -790,8 +806,8 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SizedBox(
-        width: 820,
-        height: MediaQuery.of(context).size.height * 0.85,
+        width: 1160,
+        height: MediaQuery.of(context).size.height * 0.88,
         child: Column(
           mainAxisSize: MainAxisSize.max,
           children: [
@@ -812,193 +828,290 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
 
             // Body
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Order Items', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
-                    const SizedBox(height: 8),
+                    // Left Column: Order Builder (Products, Items, Waiter)
+                    Expanded(
+                      flex: 6,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Order Items', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 14)),
+                            const SizedBox(height: 8),
 
-                    // ── Optional search to narrow the block grid below ──
-                    TextField(
-                      controller: _productSearchCtrl,
-                      decoration: InputDecoration(
-                        hintText: 'Search products (optional) — or just tap a block below...',
-                        hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
-                        filled: true,
-                        fillColor: kBgGray,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      ),
-                      onChanged: (v) => setState(() => _productQuery = v),
-                    ),
-                    const SizedBox(height: 10),
+                            // ── Optional search to narrow the block grid below ──
+                            TextField(
+                              controller: _productSearchCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Search products (optional) — or just tap a block below...',
+                                hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                                prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
+                                filled: true,
+                                fillColor: kBgGray,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                              ),
+                              onChanged: (v) => setState(() => _productQuery = v),
+                            ),
+                            const SizedBox(height: 10),
 
-                    // ── Tappable product blocks — browse & tap, no typing needed ──
-                    Obx(() {
-                      final products = _productController.products;
-                      final q = _productQuery.toLowerCase();
-                      final matches = q.isEmpty
-                          ? products
-                          : products.where((p) => p.name.toLowerCase().contains(q)).toList();
+                            // ── Tappable product blocks — browse & tap, no typing needed ──
+                            Obx(() {
+                              final products = _productController.products;
+                              final q = _productQuery.toLowerCase();
+                              final matches = q.isEmpty
+                                  ? products
+                                  : products.where((p) => p.name.toLowerCase().contains(q)).toList();
 
-                      if (_productController.isLoading.value && products.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator(color: kBlue)),
-                        );
-                      }
+                              if (_productController.isLoading.value && products.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(child: CircularProgressIndicator(color: kBlue)),
+                                );
+                              }
 
-                      if (matches.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            products.isEmpty ? 'No products in catalog yet' : 'No products match "$_productQuery"',
-                            style: const TextStyle(color: kTextGray, fontSize: 12),
-                          ),
-                        );
-                      }
+                              if (matches.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: Text(
+                                    products.isEmpty ? 'No products in catalog yet' : 'No products match "$_productQuery"',
+                                    style: const TextStyle(color: kTextGray, fontSize: 12),
+                                  ),
+                                );
+                              }
 
-                      return Container(
-                        padding: const EdgeInsets.all(10),
-                        constraints: const BoxConstraints(maxHeight: 320),
-                        decoration: BoxDecoration(
-                          color: kBgGray,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: matches.map((p) => _ProductBlock(
-                              product: p,
-                              qtyInOrder: _items
-                                  .where((i) => i.name == p.name && i.rate == p.price)
-                                  .fold(0.0, (s, i) => s + i.qty),
-                              onTap: () => _addProductToOrder(p),
-                              onDecrease: () => _decreaseProductFromOrder(p),
-                            )).toList(),
-                          ),
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 20),
-
-                    Row(
-                      children: [
-                        Expanded(child: _Field('Seats', _seatsCtrl, hint: '4', keyboardType: TextInputType.number)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _Field('Waiter', _waiterCtrl, hint: 'e.g. Anil')),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Status', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 6),
-                              DropdownButtonFormField<TableStatus>(
-                                value: _status,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: kBgGray,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                              return Container(
+                                padding: const EdgeInsets.all(10),
+                                constraints: const BoxConstraints(maxHeight: 280),
+                                decoration: BoxDecoration(
+                                  color: kBgGray,
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                items: TableStatus.values.map((s) {
-                                  final l = switch (s) {
-                                    TableStatus.empty => 'Empty',
-                                    TableStatus.occupied => 'Occupied',
-                                    TableStatus.reserved => 'Reserved',
-                                    TableStatus.billing => 'Billing',
-                                    TableStatus.cleaning => 'Cleaning',
-                                  };
-                                  return DropdownMenuItem(value: s, child: Text(l, style: const TextStyle(fontSize: 13)));
-                                }).toList(),
-                                onChanged: (s) => setState(() {
-                                  _status = s!;
-                                  if (_status != TableStatus.empty) _occupiedSince ??= DateTime.now();
-                                }),
+                                child: SingleChildScrollView(
+                                  child: Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: matches.map((p) => _ProductBlock(
+                                      product: p,
+                                      qtyInOrder: _items
+                                          .where((i) => i.name == p.name && i.rate == p.price)
+                                          .fold(0.0, (s, i) => s + i.qty),
+                                      onTap: () => _addProductToOrder(p),
+                                      onDecrease: () => _decreaseProductFromOrder(p),
+                                    )).toList(),
+                                  ),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 20),
+
+                            Row(
+                              children: [
+                                Expanded(child: _Field('Seats', _seatsCtrl, hint: '4', keyboardType: TextInputType.number)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _Field('Waiter', _waiterCtrl, hint: 'e.g. Anil')),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Status', style: TextStyle(color: kTextGray, fontSize: 12, fontWeight: FontWeight.w600)),
+                                      const SizedBox(height: 6),
+                                      DropdownButtonFormField<TableStatus>(
+                                        value: _status,
+                                        decoration: InputDecoration(
+                                          filled: true,
+                                          fillColor: kBgGray,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                        ),
+                                        items: TableStatus.values.map((s) {
+                                          final l = switch (s) {
+                                            TableStatus.empty => 'Empty',
+                                            TableStatus.occupied => 'Occupied',
+                                            TableStatus.reserved => 'Reserved',
+                                            TableStatus.billing => 'Billing',
+                                            TableStatus.cleaning => 'Cleaning',
+                                          };
+                                          return DropdownMenuItem(value: s, child: Text(l, style: const TextStyle(fontSize: 13)));
+                                        }).toList(),
+                                        onChanged: (s) => setState(() {
+                                          _status = s!;
+                                          if (_status != TableStatus.empty) _occupiedSince ??= DateTime.now();
+                                        }),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+
+                            Row(
+                              children: [
+                                const Text('Bill Lines', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 13)),
+                                const Spacer(),
+                                TextButton.icon(
+                                  onPressed: () => setState(() => _items.add(OrderItem(name: '', qty: 1, rate: 0))),
+                                  icon: const Icon(Icons.add_rounded, size: 16),
+                                  label: const Text('Custom Item'),
+                                  style: TextButton.styleFrom(foregroundColor: kBlue),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+
+                            if (_items.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Text('No items ordered yet — tap a product block above to add', style: TextStyle(color: kTextGray, fontSize: 13)),
+                              )
+                            else ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(8)),
+                                child: const Row(
+                                  children: [
+                                    Expanded(flex: 5, child: Text('Item Name', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                                    SizedBox(width: 8),
+                                    SizedBox(width: 70, child: Text('Qty', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                                    SizedBox(width: 8),
+                                    SizedBox(width: 90, child: Text('Rate (₹)', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                                    SizedBox(width: 8),
+                                    SizedBox(width: 90, child: Text('Total', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
+                                    SizedBox(width: 32),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              ...List.generate(_items.length, (i) => _OrderItemRow(
+                                key: ValueKey('item_$i-${_items[i].name}'),
+                                item: _items[i],
+                                onChanged: (item) => setState(() => _items[i] = item),
+                                onDelete: () => setState(() => _items.removeAt(i)),
+                              )),
+                            ],
+
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(color: kLightBlue, borderRadius: BorderRadius.circular(12)),
+                              child: _TotalRow('Order Total', '₹${_subtotal.toStringAsFixed(2)}', bold: true, large: true),
+                            ),
+
+                            if (_generatedBill != null) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: kGreen.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle_rounded, color: kGreen, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Bill #${_generatedBill!.billNumber} generated. You can print again or start a new bill.',
+                                        style: const TextStyle(color: kGreen, fontSize: 12, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    Row(
-                      children: [
-                        const Text('Bill Lines', style: TextStyle(fontWeight: FontWeight.w700, color: kTextDark, fontSize: 13)),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () => setState(() => _items.add(OrderItem(name: '', qty: 1, rate: 0))),
-                          icon: const Icon(Icons.add_rounded, size: 16),
-                          label: const Text('Custom Item'),
-                          style: TextButton.styleFrom(foregroundColor: kBlue),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    if (_items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text('No items ordered yet — tap a product block above to add', style: TextStyle(color: kTextGray, fontSize: 13)),
-                      )
-                    else ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: kBgGray, borderRadius: BorderRadius.circular(8)),
-                        child: const Row(
-                          children: [
-                            Expanded(flex: 5, child: Text('Item Name', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
-                            SizedBox(width: 8),
-                            SizedBox(width: 70, child: Text('Qty', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
-                            SizedBox(width: 8),
-                            SizedBox(width: 90, child: Text('Rate (₹)', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
-                            SizedBox(width: 8),
-                            SizedBox(width: 90, child: Text('Total', style: TextStyle(color: kTextGray, fontSize: 11, fontWeight: FontWeight.w600))),
-                            SizedBox(width: 32),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      ...List.generate(_items.length, (i) => _OrderItemRow(
-                        key: ValueKey('item_$i-${_items[i].name}'),
-                        item: _items[i],
-                        onChanged: (item) => setState(() => _items[i] = item),
-                        onDelete: () => setState(() => _items.removeAt(i)),
-                      )),
-                    ],
-
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: kLightBlue, borderRadius: BorderRadius.circular(12)),
-                      child: _TotalRow('Order Total', '₹${_subtotal.toStringAsFixed(2)}', bold: true, large: true),
                     ),
 
-                    if (_generatedBill != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: kGreen.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
-                        child: Row(
+                    const SizedBox(width: 20),
+
+                    // Right Column: Live Thermal Receipt Preview
+                    Container(
+                      width: 340,
+                      height: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kBgGray,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.06)),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.check_circle_rounded, color: kGreen, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Bill #${_generatedBill!.billNumber} generated. You can print again or start a new bill.',
-                                style: const TextStyle(color: kGreen, fontSize: 12, fontWeight: FontWeight.w600),
+                            // Switcher: [Receipt Preview] | [KOT Preview]
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.black12),
                               ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _previewKOT = false),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: !_previewKOT ? kBlue : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'Receipt Preview',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: !_previewKOT ? kWhite : kTextGray,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _previewKOT = true),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: _previewKOT ? kPurple : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'KOT Preview',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: _previewKOT ? kWhite : kTextGray,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            BillReceiptPreview(
+                              tableId: widget.table.tableId,
+                              waiter: _waiterCtrl.text.trim(),
+                              billNumber: _generatedBill?.billNumber,
+                              items: _items,
+                              subtotal: _subtotal,
+                              grandTotal: _subtotal,
+                              isKOT: _previewKOT,
                             ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:test_bill/service/api_service.dart';
 
 class AuthController extends GetxController {
   final ApiService _api = ApiService.instance;
+  final GetStorage _box = GetStorage();
 
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
@@ -19,6 +21,12 @@ class AuthController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    final savedMode = _box.read<String>('target_mode');
+    if (savedMode != null) {
+      targetMode.value = savedMode;
+    } else if (!GetPlatform.isWindows) {
+      targetMode.value = 'waiter';
+    }
     // If a token survived from a previous session, hydrate the profile.
     if (_api.isLoggedIn) _loadProfile();
   }
@@ -37,6 +45,7 @@ class AuthController extends GetxController {
     } on ApiException {
       // Token is stale/invalid — drop it so the login screen shows again.
       _api.clearToken();
+      _box.remove('target_mode');
     }
   }
 
@@ -59,6 +68,7 @@ class AuthController extends GetxController {
         return false;
       }
       _api.saveToken(token);
+      _box.write('target_mode', targetMode.value);
       currentUser.value = (data['user'] is Map)
           ? Map<String, dynamic>.from(data['user'])
           : data;
