@@ -29,11 +29,13 @@ class PrintService {
   static const _printerKey = 'selected_printer';
 
   // ── Shop details shown on every receipt — adjust to taste ─────────────
-  static const String shopName = 'Grillo';
-  static const String shopAddress = ''; // e.g. '123 Main Street'
-  static const String footerLine = 'Thank you, visit again!';
+  String get shopName => _box.read<String>('shop_name') ?? 'Grillo';
+  String get shopAddress => _box.read<String>('shop_address') ?? '';
+  String get footerLine => _box.read<String>('footer_note') ?? 'Thank you, visit again!';
+
   // ── Rounds a price for display — 29.99 -> 30 ──
   String _money(double amount) => amount.round().toString();
+
   // ── Printer selection ──────────────────────────────────────────────
   Future<List<String>> getAvailablePrinters() async {
     if (!GetPlatform.isWindows) {
@@ -51,13 +53,15 @@ class PrintService {
   Future<void> savePrinter(String printerName) =>
       _box.write(_printerKey, printerName);
 
-  /// Picks which printer to send jobs to: the saved one if it's still
-  /// plugged in, otherwise the first printer Windows can see, else null.
+  /// Picks which printer to send jobs to: the saved printer (instant),
+  /// or if not set, queries Windows for installed printers once.
   Future<String?> resolvePrinter() async {
+    final saved = savedPrinter;
+    if (saved != null && saved.isNotEmpty) {
+      return saved;
+    }
     final printers = await getAvailablePrinters();
     if (printers.isEmpty) return null;
-    final saved = savedPrinter;
-    if (saved != null && printers.contains(saved)) return saved;
     return printers.first;
   }
 
@@ -71,14 +75,9 @@ class PrintService {
       return;
     }
     final target = printerName ?? await resolvePrinter();
-    final printers = await getAvailablePrinters();
-
-    for (final printer in printers) {
-      print(printer);
-    }
-    if (target == null) {
+    if (target == null || target.isEmpty) {
       throw PrintException(
-        'No printer found. Make sure your thermal printer is connected and installed in Windows.',
+        'No printer found. Make sure your thermal printer is connected and selected in Settings.',
       );
     }
 
@@ -163,8 +162,9 @@ class PrintService {
 
   /// Sends bill to printer twice: normal customer copy + kitchen copy (no prices).
   Future<void> printBillWithKOT(Bill bill, {String? printerName}) async {
-    await printBill(bill, printerName: printerName);
-    await printKitchenBill(bill, printerName: printerName);
+    final target = printerName ?? await resolvePrinter();
+    await printBill(bill, printerName: target);
+    await printKitchenBill(bill, printerName: target);
   }
 
   /// Print Kitchen Order Ticket (KOT) directly from table order items
@@ -201,7 +201,7 @@ class PrintService {
       return;
     }
     final target = printerName ?? await resolvePrinter();
-    if (target == null) {
+    if (target == null || target.isEmpty) {
       debugPrint('No thermal printer connected. KOT logged for Table ${bill.tableId}.');
       return;
     }

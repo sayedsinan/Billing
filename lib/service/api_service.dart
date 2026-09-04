@@ -17,8 +17,9 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -122,9 +123,16 @@ class ApiService {
       return body is Map && body.containsKey('data') ? body['data'] : body;
     } on DioException catch (e) {
       print("❌ API ERROR");
+      print("Type        : ${e.type}");
       print("Status Code : ${e.response?.statusCode}");
       print("Response    : ${e.response?.data}");
       print("Request Data: ${e.requestOptions.data}");
+
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw ApiException('Server response timed out. Please check your connection and try again.');
+      }
 
       final serverMessage = e.response?.data is Map
           ? e.response?.data['message']
