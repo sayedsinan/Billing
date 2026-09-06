@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:test_bill/controller/bill_controller.dart';
+import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/theme/colors.dart';
+import 'package:test_bill/view/shift/cash_register_page.dart';
 
-// ─── Reports Page — today's orders, reprint & delete ──────────────────────────
+// ─── Reports Page — Orders Log & Category/Item Sales Report ───────────────────
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
 
@@ -13,9 +15,17 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
+  int _activeTab = 0; // 0: Orders Log, 1: Category & Item Sales Report
   DateTime _selectedDate = DateTime.now();
+
+  // Orders Log filters
   String _search = '';
   BillStatus? _filterStatus;
+
+  // Item Sales Report filters
+  String _itemCategoryFilter = 'All';
+  String _itemSearch = '';
+  String _itemSortBy = 'qty'; // 'qty', 'revenue', 'name'
 
   DateTime get _dayStart => DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
   DateTime get _dayEnd => _dayStart.add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1));
@@ -31,11 +41,15 @@ class _ReportsPageState extends State<ReportsPage> {
     if (!Get.isRegistered<BillController>()) {
       Get.put(BillController());
     }
+    if (!Get.isRegistered<ProductController>()) {
+      Get.put(ProductController());
+    }
     _load();
   }
 
   void _load() {
     Get.find<BillController>().fetchBills(from: _dayStart, to: _dayEnd);
+    Get.find<ProductController>().fetchProducts();
   }
 
   void _changeDay(int deltaDays) {
@@ -51,15 +65,6 @@ class _ReportsPageState extends State<ReportsPage> {
   String get _dateLabel {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${_selectedDate.day} ${months[_selectedDate.month - 1]} ${_selectedDate.year}';
-  }
-
-  static String formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h24 = local.hour;
-    final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
-    final mm = local.minute.toString().padLeft(2, '0');
-    final ampm = h24 >= 12 ? 'PM' : 'AM';
-    return '$h12:$mm $ampm';
   }
 
   void _openDetail(BuildContext ctx, BillController controller, Bill bill) {
@@ -94,6 +99,24 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
+  /// Helper to classify items into categories like "Shawarma", "Beverages", "Burgers", etc.
+  String _inferCategory(String itemName) {
+    final lower = itemName.toLowerCase();
+    final prodCtrl = Get.isRegistered<ProductController>() ? Get.find<ProductController>() : null;
+    if (prodCtrl != null && prodCtrl.products.isNotEmpty) {
+      final match = prodCtrl.products.firstWhereOrNull((p) => p.name.toLowerCase() == lower);
+      if (match != null && match.category.isNotEmpty) {
+        return match.category;
+      }
+    }
+    if (lower.contains('shawarma')) return 'Shawarma';
+    if (lower.contains('burger')) return 'Burgers';
+    if (lower.contains('roll')) return 'Rolls';
+    if (lower.contains('juice') || lower.contains('shake') || lower.contains('tea') || lower.contains('coffee') || lower.contains('water') || lower.contains('coke')) return 'Beverages';
+    if (lower.contains('fry') || lower.contains('nugget') || lower.contains('wing')) return 'Starters';
+    return 'General';
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<BillController>();
@@ -105,7 +128,64 @@ class _ReportsPageState extends State<ReportsPage> {
         final loading = controller.isLoadingBills.value;
         final deleting = controller.isDeleting.value;
 
-        final filtered = allBills.where((b) {
+        // Filter bills by selected date FIRST so metrics are strictly for the chosen date
+        final dateBills = allBills.where((b) {
+          final dt = b.createdAt.toLocal();
+          return dt.year == _selectedDate.year &&
+                 dt.month == _selectedDate.month &&
+                 dt.day == _selectedDate.day;
+        }).toList();
+
+        // Calculate item sales breakdown
+        final itemMap = <String, Map<String, dynamic>>{};
+        double totalItemsSold = 0;
+        double totalItemsRevenue = 0;
+        final categorySet = <String>{'All', 'Shawarma'};
+
+        for (final b in dateBills) {
+          if (b.status == BillStatus.cancelled) continue;
+          for (final item in b.items) {
+            final cat = _inferCategory(item.name);
+            categorySet.add(cat);
+
+            totalItemsSold += item.qty;
+            totalItemsRevenue += item.total;
+
+            if (itemMap.containsKey(item.name)) {
+              itemMap[item.name]!['qty'] += item.qty;
+              itemMap[item.name]!['total'] += item.total;
+            } else {
+              itemMap[item.name] = {
+                'name': item.name,
+                'category': cat,
+                'qty': item.qty,
+                'rate': item.rate,
+                'total': item.total,
+              };
+            }
+          }
+        }
+
+        // Process item sales list
+        List<Map<String, dynamic>> itemList = itemMap.values.toList();
+        if (_itemCategoryFilter != 'All') {
+          itemList = itemList.where((i) => (i['category'] as String).toLowerCase() == _itemCategoryFilter.toLowerCase()).toList();
+        }
+        if (_itemSearch.isNotEmpty) {
+          itemList = itemList.where((i) => (i['name'] as String).toLowerCase().contains(_itemSearch.toLowerCase())).toList();
+        }
+
+        if (_itemSortBy == 'qty') {
+          itemList.sort((a, b) => (b['qty'] as num).compareTo(a['qty'] as num));
+        } else if (_itemSortBy == 'revenue') {
+          itemList.sort((a, b) => (b['total'] as num).compareTo(a['total'] as num));
+        } else if (_itemSortBy == 'name') {
+          itemList.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+        }
+
+        final maxQty = itemList.isEmpty ? 1.0 : itemList.map((i) => (i['qty'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+
+        final filteredOrders = dateBills.where((b) {
           final q = _search.toLowerCase();
           final matchSearch = q.isEmpty ||
               b.billNumber.toLowerCase().contains(q) ||
@@ -114,27 +194,74 @@ class _ReportsPageState extends State<ReportsPage> {
               (b.tableId ?? '').toLowerCase().contains(q);
           final matchStatus = _filterStatus == null || b.status == _filterStatus;
           return matchSearch && matchStatus;
-        }).toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        final pendingCount = allBills.where((b) => b.status == BillStatus.pending || b.status == BillStatus.unpaid).length;
-        final cancelledCount = allBills.where((b) => b.status == BillStatus.cancelled).length;
+        final pendingCount = dateBills.where((b) => b.status == BillStatus.pending || b.status == BillStatus.unpaid).length;
+        final cancelledCount = dateBills.where((b) => b.status == BillStatus.cancelled).length;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header row: title + date navigator ──────────────────────
+              // ── Header row: title + section tabs + date navigator ──────────────
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Text('Reports', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: kTextDark, letterSpacing: -0.3)),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${allBills.length} order${allBills.length == 1 ? '' : 's'}',
-                    style: const TextStyle(fontSize: 13, color: kTextGray, fontWeight: FontWeight.w600),
+                  const SizedBox(width: 20),
+
+                  // Section Switcher: [ Orders Log ] | [ Category & Item Sales ]
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(10)),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() => _activeTab = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _activeTab == 0 ? kBlue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.receipt_long_rounded, size: 14, color: _activeTab == 0 ? kWhite : kTextGray),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Orders Log',
+                                  style: TextStyle(color: _activeTab == 0 ? kWhite : kTextDark, fontWeight: FontWeight.w700, fontSize: 12.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _activeTab = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _activeTab == 1 ? kOrange : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.category_rounded, size: 14, color: _activeTab == 1 ? kWhite : kTextGray),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Category & Item Sales',
+                                  style: TextStyle(color: _activeTab == 1 ? kWhite : kTextDark, fontWeight: FontWeight.w700, fontSize: 12.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+
                   const Spacer(),
                   _DateNav(
                     label: _dateLabel,
@@ -163,101 +290,13 @@ class _ReportsPageState extends State<ReportsPage> {
                 ],
               ),
 
-              const SizedBox(height: 20),
-
-              // ── Summary strip ────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                decoration: BoxDecoration(
-                  color: kWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 10, offset: Offset(0, 3))],
-                ),
-                child: Row(
-                  children: [
-                    _StatCell('Revenue', '₹${controller.totalRevenue.value.toStringAsFixed(0)}', kGreen, filled: true),
-                    _statDivider(),
-                    _StatCell('Orders', '${allBills.length}', kBlue),
-                    _statDivider(),
-                    _StatCell('Pending', '$pendingCount', kOrange),
-                    _statDivider(),
-                    _StatCell('Cancelled', '$cancelledCount', kTextGray),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── Toolbar ──────────────────────────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 42,
-                      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(11)),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          isDense: true,
-                          hintText: 'Search bill no, table, customer, waiter…',
-                          hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
-                          prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
-                        ),
-                        onChanged: (v) => setState(() => _search = v),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _StatusFilterBar(
-                    selected: _filterStatus,
-                    onSelect: (s) => setState(() => _filterStatus = s),
-                  ),
-                ],
-              ),
-
               const SizedBox(height: 18),
 
-              // ── Bill list ────────────────────────────────────────────────
+              // ── Active View Rendering ────────────────────────────────────
               Expanded(
-                child: RefreshIndicator(
-                  color: kBlue,
-                  onRefresh: () async => _load(),
-                  child: loading && allBills.isEmpty
-                      ? const Center(child: CircularProgressIndicator(color: kBlue))
-                      : filtered.isEmpty
-                          ? ListView(children: const [
-                              SizedBox(height: 90),
-                              Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.receipt_long_outlined, color: kTextGray, size: 44),
-                                    SizedBox(height: 12),
-                                    Text('No orders for this day', style: TextStyle(color: kTextGray, fontSize: 14, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
-                            ])
-                          : ListView.separated(
-                              padding: const EdgeInsets.only(bottom: 24),
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 10),
-                              itemBuilder: (ctx, i) => _BillRow(
-                                bill: filtered[i],
-                                deleting: deleting,
-                                onTap: () => _openDetail(ctx, controller, filtered[i]),
-                                onPrint: () async {
-                                  final ok = await controller.printBill(filtered[i]);
-                                  if (ok && ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
-                                    );
-                                  }
-                                },
-                                onDelete: () => _confirmDelete(ctx, controller, filtered[i]),
-                              ),
-                            ),
-                ),
+                child: _activeTab == 0
+                    ? _buildOrdersLogTab(controller, allBills, filteredOrders, pendingCount, cancelledCount, loading, deleting)
+                    : _buildItemSalesTab(itemList, totalItemsSold, totalItemsRevenue, categorySet.toList(), maxQty, loading),
               ),
             ],
           ),
@@ -266,7 +305,458 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
+  // ── Tab 1: Orders Log View ────────────────────────────────────────────────
+  Widget _buildOrdersLogTab(
+    BillController controller,
+    List<Bill> allBills,
+    List<Bill> filtered,
+    int pendingCount,
+    int cancelledCount,
+    bool loading,
+    bool deleting,
+  ) {
+    return Column(
+      children: [
+        // Summary strip
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: BoxDecoration(
+            color: kWhite,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 10, offset: Offset(0, 3))],
+          ),
+          child: Row(
+            children: [
+              _StatCell('Revenue', '₹${controller.totalRevenue.value.toStringAsFixed(0)}', kGreen, filled: true),
+              _statDivider(),
+              _StatCell('Orders', '${allBills.length}', kBlue),
+              _statDivider(),
+              _StatCell('Pending', '$pendingCount', kOrange),
+              _statDivider(),
+              _StatCell('Cancelled', '$cancelledCount', kTextGray),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Toolbar
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(11)),
+                child: TextField(
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search bill no, table, customer, waiter…',
+                    hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (v) => setState(() => _search = v),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _StatusFilterBar(
+              selected: _filterStatus,
+              onSelect: (s) => setState(() => _filterStatus = s),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        // Bill list
+        Expanded(
+          child: RefreshIndicator(
+            color: kBlue,
+            onRefresh: () async => _load(),
+            child: loading && allBills.isEmpty
+                ? const Center(child: CircularProgressIndicator(color: kBlue))
+                : filtered.isEmpty
+                    ? ListView(children: const [
+                        SizedBox(height: 90),
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.receipt_long_outlined, color: kTextGray, size: 44),
+                              SizedBox(height: 12),
+                              Text('No orders for this day', style: TextStyle(color: kTextGray, fontSize: 14, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ])
+                    : ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (ctx, i) => _BillRow(
+                          bill: filtered[i],
+                          deleting: deleting,
+                          onTap: () => _openDetail(ctx, controller, filtered[i]),
+                          onPrint: () async {
+                            final ok = await controller.printBill(filtered[i]);
+                            if (ok && ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(content: Text('Sent to printer'), backgroundColor: kGreen),
+                              );
+                            }
+                          },
+                          onDelete: () => _confirmDelete(ctx, controller, filtered[i]),
+                        ),
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Tab 2: Category & Item Sales Section (Shawarma, Beverages, etc.) ────────
+  Widget _buildItemSalesTab(
+    List<Map<String, dynamic>> itemList,
+    double totalItemsSold,
+    double totalItemsRevenue,
+    List<String> categories,
+    double maxQty,
+    bool loading,
+  ) {
+    final filteredQty = itemList.fold(0.0, (s, i) => s + (i['qty'] as num));
+    final filteredRevenue = itemList.fold(0.0, (s, i) => s + (i['total'] as num));
+    final topItem = itemList.isEmpty ? 'None' : itemList.first['name'].toString();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // KPI Summary Cards
+        Row(
+          children: [
+            Expanded(
+              child: _KpiCard(
+                title: 'Section Revenue',
+                value: '₹${filteredRevenue.toStringAsFixed(0)}',
+                subtitle: _itemCategoryFilter == 'All' ? 'All Sections Total' : '$_itemCategoryFilter Sales',
+                icon: Icons.monetization_on_rounded,
+                color: kGreen,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _KpiCard(
+                title: 'Items Sold',
+                value: '${filteredQty == filteredQty.toInt() ? filteredQty.toInt() : filteredQty.toStringAsFixed(1)} pcs',
+                subtitle: 'Total Units Delivered',
+                icon: Icons.fastfood_rounded,
+                color: kOrange,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _KpiCard(
+                title: 'Top Item',
+                value: topItem,
+                subtitle: itemList.isEmpty ? 'No sales yet' : '${(itemList.first['qty'] as num).toInt()} sold (₹${(itemList.first['total'] as num).toInt()})',
+                icon: Icons.star_rounded,
+                color: kPurple,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _KpiCard(
+                title: 'Unique Items',
+                value: '${itemList.length}',
+                subtitle: 'Active Menu Varieties',
+                icon: Icons.format_list_bulleted_rounded,
+                color: kBlue,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        // Category Filter Chips & Search Toolbar
+        Row(
+          children: [
+            // Category Chips Bar
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: categories.map((cat) {
+                    final active = _itemCategoryFilter.toLowerCase() == cat.toLowerCase();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(cat == 'Shawarma' ? '🥙 Shawarma Section' : cat),
+                        selected: active,
+                        selectedColor: kOrange,
+                        backgroundColor: kWhite,
+                        labelStyle: TextStyle(
+                          color: active ? kWhite : kTextDark,
+                          fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        onSelected: (_) => setState(() => _itemCategoryFilter = cat),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            // Search Bar
+            SizedBox(
+              width: 220,
+              height: 40,
+              child: TextField(
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Search items…',
+                  hintStyle: const TextStyle(color: kTextGray, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: kTextGray, size: 18),
+                  filled: true,
+                  fillColor: kWhite,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+                onChanged: (v) => setState(() => _itemSearch = v),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            // Sort Dropdown
+            Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(10)),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _itemSortBy,
+                  icon: const Icon(Icons.sort_rounded, color: kTextGray, size: 18),
+                  items: const [
+                    DropdownMenuItem(value: 'qty', child: Text('Sort by Qty', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                    DropdownMenuItem(value: 'revenue', child: Text('Sort by Revenue', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                    DropdownMenuItem(value: 'name', child: Text('Sort by Name', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  ],
+                  onChanged: (v) => setState(() => _itemSortBy = v!),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        // Sales Report Table Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: kWhite,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 4)],
+          ),
+          child: const Row(
+            children: [
+              SizedBox(width: 40, child: Text('#', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+              Expanded(flex: 4, child: Text('ITEM NAME', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+              Expanded(flex: 2, child: Text('CATEGORY', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+              Expanded(flex: 4, child: Text('QUANTITY SOLD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+              SizedBox(width: 100, child: Text('UNIT RATE', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+              SizedBox(width: 120, child: Text('TOTAL SALES', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: kTextGray))),
+            ],
+          ),
+        ),
+
+        // Sales Report Table Rows
+        Expanded(
+          child: itemList.isEmpty
+              ? Container(
+                  width: double.infinity,
+                  color: kWhite,
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 48, color: kTextGray),
+                        SizedBox(height: 12),
+                        Text('No item sales found for this date/category', style: TextStyle(color: kTextGray, fontSize: 14, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: itemList.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: kBgGray),
+                  itemBuilder: (ctx, idx) {
+                    final item = itemList[idx];
+                    final qty = (item['qty'] as num).toDouble();
+                    final total = (item['total'] as num).toDouble();
+                    final rate = (item['rate'] as num).toDouble();
+                    final cat = item['category'] as String;
+                    final pct = filteredRevenue == 0 ? 0.0 : (total / filteredRevenue);
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      color: kWhite,
+                      child: Row(
+                        children: [
+                          // Rank
+                          SizedBox(
+                            width: 40,
+                            child: Text(
+                              '${idx + 1}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: idx < 3 ? kOrange : kTextGray,
+                              ),
+                            ),
+                          ),
+
+                          // Item Name
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              item['name'].toString(),
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: kTextDark),
+                            ),
+                          ),
+
+                          // Category Badge
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: cat.toLowerCase() == 'shawarma' ? kOrange.withOpacity(0.12) : kBlue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  cat,
+                                  style: TextStyle(
+                                    color: cat.toLowerCase() == 'shawarma' ? kOrange : kBlue,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Quantity Sold with Visual Progress Bar
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${qty == qty.toInt() ? qty.toInt() : qty.toStringAsFixed(1)} sold  (${ (pct * 100).toStringAsFixed(1) }%)',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: kTextDark),
+                                ),
+                                const SizedBox(height: 4),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: maxQty == 0 ? 0 : (qty / maxQty),
+                                    backgroundColor: kBgGray,
+                                    color: cat.toLowerCase() == 'shawarma' ? kOrange : kBlue,
+                                    minHeight: 6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Unit Rate
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              '₹${rate.toStringAsFixed(0)}',
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(color: kTextGray, fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+
+                          // Total Sales
+                          SizedBox(
+                            width: 120,
+                            child: Text(
+                              '₹${total.toStringAsFixed(0)}',
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: kGreen),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
   Widget _statDivider() => Container(width: 1, height: 40, color: kBgGray);
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+class _KpiCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  const _KpiCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kWhite,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: kTextGray, letterSpacing: 0.5)),
+                const SizedBox(height: 2),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+                const SizedBox(height: 2),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: kTextGray)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Date navigator ─────────────────────────────────────────────────────────
@@ -407,14 +897,6 @@ class _BillRow extends StatelessWidget {
     BillStatus.cancelled => kTextGray,
   };
 
-  String get _statusLabel => switch (bill.status) {
-    BillStatus.paid => 'Paid',
-    BillStatus.pending => 'Pending',
-    BillStatus.unpaid => 'Unpaid',
-    BillStatus.overdue => 'Overdue',
-    BillStatus.cancelled => 'Cancelled',
-  };
-
   @override
   Widget build(BuildContext context) {
     final itemCount = bill.items.fold(0.0, (s, i) => s + i.qty);
@@ -515,9 +997,6 @@ class _BillRow extends StatelessWidget {
 
                         const SizedBox(width: 12),
 
-                       
-                        const SizedBox(width: 16),
-
                         // Total
                         SizedBox(
                           width: 76,
@@ -556,7 +1035,7 @@ class _BillRow extends StatelessWidget {
   }
 }
 
-/// Shared time formatter so the detail dialog and row use identical formatting.
+/// Shared time formatter
 class ReportsPageTimeFormatter {
   static String format(DateTime dt) {
     final local = dt.toLocal();
@@ -626,9 +1105,9 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
             onPressed: () async {
-              Navigator.pop(dialogCtx); // close confirm
+              Navigator.pop(dialogCtx);
               await widget.controller.deleteBill(widget.bill.id);
-              if (mounted) Navigator.pop(context); // close detail dialog
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('Delete'),
           ),
@@ -649,13 +1128,12 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(22, 20, 16, 20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: kBlue,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 children: [
@@ -680,7 +1158,6 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Meta row: status, source, waiter/customer
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -765,7 +1242,6 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
               ),
             ),
 
-            // Footer actions
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
               child: Row(
@@ -798,7 +1274,7 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
                       icon: _printing
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kWhite))
                           : const Icon(Icons.print_rounded, size: 18),
-                      label: const Text('Reprint bill', style: TextStyle(fontWeight: FontWeight.w700)),
+                      label: const Text('Print Receipt', style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],
@@ -810,16 +1286,16 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
     );
   }
 
-  Widget _totalRow(String label, double value, {bool bold = false, bool large = false, Color? color}) {
+  Widget _totalRow(String label, double val, {bool bold = false, bool large = false, Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: kTextGray, fontSize: large ? 14 : 12.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
+          Text(label, style: TextStyle(fontSize: large ? 15 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w500, color: kTextDark)),
           Text(
-            '${value < 0 ? '-' : ''}₹${value.abs().toStringAsFixed(2)}',
-            style: TextStyle(color: color ?? (bold ? kTextDark : kTextGray), fontSize: large ? 17 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600),
+            '${val < 0 ? '-' : ''}₹${val.abs().toStringAsFixed(0)}',
+            style: TextStyle(fontSize: large ? 16 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: color ?? kTextDark),
           ),
         ],
       ),
@@ -842,7 +1318,7 @@ class _MetaChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: kTextGray),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontSize: 11.5, color: kTextDark, fontWeight: FontWeight.w600)),
+          Text(label, style: const TextStyle(color: kTextDark, fontSize: 11.5, fontWeight: FontWeight.w600)),
         ],
       ),
     );

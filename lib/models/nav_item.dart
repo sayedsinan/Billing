@@ -12,6 +12,7 @@ const kNavItems = [
   NavItem(Icons.receipt_long_rounded, 'Billing',),
   NavItem(Icons.inventory_2_rounded, 'Stock'),
   NavItem(Icons.bar_chart_rounded, 'Reports'),
+  NavItem(Icons.account_balance_wallet_rounded, 'Register Float'),
   NavItem(Icons.people_rounded, 'Customers'),
   NavItem(Icons.local_offer_rounded, 'Products'),
   NavItem(Icons.swap_horiz_rounded, 'Transactions'),

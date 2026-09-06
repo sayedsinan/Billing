@@ -236,6 +236,80 @@ class PrintService {
     }
   }
 
+  /// Thermal print Z-Report / Daily Register Shift Settlement
+  Future<void> printShiftSettlementReport({
+    required String shiftLabel,
+    required double openingCash,
+    required double openingBank,
+    required double cashSales,
+    required double onlineSales,
+    required double totalExpenses,
+    required double expectedCash,
+    required double actualCash,
+    required double cashVariance,
+    required double expectedBank,
+    required double actualBank,
+    required double bankVariance,
+    String? printerName,
+  }) async {
+    if (!GetPlatform.isWindows) {
+      debugPrint("Direct thermal printing is only supported on Windows.");
+      return;
+    }
+    final target = printerName ?? await resolvePrinter();
+    if (target == null || target.isEmpty) {
+      throw PrintException('No printer connected or selected in Settings.');
+    }
+
+    const centerBold = WPTextStyle(align: WPTextAlign.center, bold: true);
+    const center = WPTextStyle(align: WPTextAlign.center);
+
+    final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
+
+    builder.header(shopName);
+    builder.line('SHIFT CLOSE & CASH Z-REPORT', style: centerBold);
+    builder.line('Time: $shiftLabel', style: center);
+    builder.separator();
+
+    builder.item('Opening Cash Float', '₹${openingCash.round()}');
+    builder.item('Opening Bank Balance', '₹${openingBank.round()}');
+    builder.separator();
+
+    builder.item('+ Today Cash Sales', '₹${cashSales.round()}');
+    builder.item('+ Today Online Sales', '₹${onlineSales.round()}');
+    builder.item('- Cash Drops/Expenses', '₹${totalExpenses.round()}');
+    builder.separator();
+
+    builder.item('Expected Cash in Drawer', '₹${expectedCash.round()}');
+    builder.item('Actual Cash Counted', '₹${actualCash.round()}');
+    builder.item('Cash Variance', '₹${cashVariance.round() >= 0 ? "+" : ""}${cashVariance.round()}');
+    builder.separator();
+
+    builder.item('Expected Bank Total', '₹${expectedBank.round()}');
+    builder.item('Actual Bank Counted', '₹${actualBank.round()}');
+    builder.item('Bank Variance', '₹${bankVariance.round() >= 0 ? "+" : ""}${bankVariance.round()}');
+    builder.separator();
+
+    final netTotal = actualCash + actualBank;
+    builder.item('NET DAY REVENUE (POS)', '₹${(cashSales + onlineSales).round()}');
+    builder.item('NET CASH + BANK IN HAND', '₹${netTotal.round()}');
+
+    builder.separator();
+    builder.line('--- SHIFT CLOSED ---', style: centerBold);
+    _cutPaper(builder);
+
+    final bytes = Uint8List.fromList(builder.build());
+    try {
+      await WindowsPrinter.printRawData(
+        printerName: target,
+        data: bytes,
+        useRawDatatype: true,
+      );
+    } catch (e) {
+      throw PrintException('Could not print shift report: $e');
+    }
+  }
+
   Uint8List _buildKitchenReceiptBytes(Bill bill) {
     const center = WPTextStyle(align: WPTextAlign.center);
     const centerBold = WPTextStyle(align: WPTextAlign.center, bold: true);

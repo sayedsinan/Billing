@@ -11,6 +11,7 @@ import 'package:test_bill/view/mobile/waiter_mobile_page.dart';
 import 'package:test_bill/view/product/product_page.dart';
 import 'package:test_bill/view/reports/reports_page.dart';
 import 'package:test_bill/view/settings/settings_page.dart';
+import 'package:test_bill/view/shift/cash_register_page.dart';
 import 'package:test_bill/view/stock/stock_page.dart';
 import 'package:test_bill/view/transactions/transactions_page.dart';
 import 'package:test_bill/view/widgets/dashboard_content.dart';
@@ -314,11 +315,12 @@ class _HomePageState extends State<HomePage> {
                       TableOrderPage(),    // Index 1
                       StockPage(),         // Index 2
                       ReportsPage(),       // Index 3
-                      CustomersPage(),     // Index 4
-                      ProductsPage(),      // Index 5
-                      TransactionsPage(),  // Index 6
-                      AttendancePage(),    // Index 7
-                      SettingsPage(),      // Index 8
+                      CashRegisterPage(),  // Index 4
+                      CustomersPage(),     // Index 5
+                      ProductsPage(),      // Index 6
+                      TransactionsPage(),  // Index 7
+                      AttendancePage(),    // Index 8
+                      SettingsPage(),      // Index 9
                     ],
                   ),
                 ),

@@ -553,6 +553,7 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
   final ProductController _productController = Get.find<ProductController>();
   final TextEditingController _productSearchCtrl = TextEditingController();
   String _productQuery = '';
+  String _selectedCategory = 'All';
 
   @override
   void initState() {
@@ -863,13 +864,47 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
                             ),
                             const SizedBox(height: 10),
 
-                            // ── Tappable product blocks — browse & tap, no typing needed ──
+                            // ── Category-wise Filter Chips ──
+                            Obx(() {
+                              final categories = ['All', ..._productController.categories];
+                              return SizedBox(
+                                height: 34,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: categories.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                                  itemBuilder: (ctx, idx) {
+                                    final cat = categories[idx];
+                                    final active = _selectedCategory.toLowerCase() == cat.toLowerCase();
+                                    return ChoiceChip(
+                                      label: Text(cat == 'Shawarma' ? '🥙 Shawarma' : cat),
+                                      selected: active,
+                                      selectedColor: kBlue,
+                                      backgroundColor: kBgGray,
+                                      labelStyle: TextStyle(
+                                        color: active ? kWhite : kTextDark,
+                                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                      onSelected: (_) => setState(() => _selectedCategory = cat),
+                                    );
+                                  },
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 10),
+
+                            // ── Tappable product blocks — Category-wise ──
                             Obx(() {
                               final products = _productController.products;
                               final q = _productQuery.toLowerCase();
-                              final matches = q.isEmpty
+                              var matches = q.isEmpty
                                   ? products
                                   : products.where((p) => p.name.toLowerCase().contains(q)).toList();
+
+                              if (_selectedCategory != 'All') {
+                                matches = matches.where((p) => p.category.toLowerCase() == _selectedCategory.toLowerCase()).toList();
+                              }
 
                               if (_productController.isLoading.value && products.isEmpty) {
                                 return const Padding(

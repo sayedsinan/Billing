@@ -31,20 +31,24 @@ class _DashboardContentState extends State<DashboardContent> {
 
   _DashRange _range = _DashRange.today;
 
+  void _fetchDashboardData() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30));
+    _billController.fetchBills(from: start, to: now.add(const Duration(days: 1)));
+  }
+
   @override
   void initState() {
     super.initState();
     _billController = Get.find<BillController>();
-    if (_billController.bills.isEmpty) {
-      _billController.fetchBills();
-    }
+    _fetchDashboardData();
   }
 
   Future<void> _refresh() async {
     if (_manualRefreshing) return;
     setState(() => _manualRefreshing = true);
     try {
-      await _billController.fetchBills();
+      _fetchDashboardData();
     } finally {
       if (mounted) setState(() => _manualRefreshing = false);
     }
@@ -164,10 +168,6 @@ class _DashboardContentState extends State<DashboardContent> {
         return const Center(child: CircularProgressIndicator(color: kBlue));
       }
 
-      if (allBills.isEmpty) {
-        return _EmptyState(onRefresh: () => _billController.fetchBills());
-      }
-
       final now = DateTime.now();
 
       // ── Filtered bills for the selected range, plus the previous period
@@ -258,7 +258,10 @@ class _DashboardContentState extends State<DashboardContent> {
                 _RangeChip(
                   'Today',
                   _range == _DashRange.today,
-                  () => setState(() => _range = _DashRange.today),
+                  () {
+                    setState(() => _range = _DashRange.today);
+                    _billController.fetchBills();
+                  },
                 ),
 
                 const SizedBox(width: 6),
@@ -283,7 +286,10 @@ class _DashboardContentState extends State<DashboardContent> {
                 _RangeChip(
                   'All Time',
                   _range == _DashRange.all,
-                  () => setState(() => _range = _DashRange.all),
+                  () {
+                    setState(() => _range = _DashRange.all);
+                    _billController.fetchBills(allTime: true);
+                  },
                 ),
               ],
             ),

@@ -208,14 +208,24 @@ class BillController extends GetxController {
     String? tableId,
     DateTime? from,
     DateTime? to,
+    bool allTime = false,
   }) async {
     isLoadingBills.value = true;
     try {
+      DateTime? effectiveFrom = from;
+      DateTime? effectiveTo = to;
+
+      if (!allTime && effectiveFrom == null && effectiveTo == null) {
+        final now = DateTime.now();
+        effectiveFrom = DateTime(now.year, now.month, now.day);
+        effectiveTo = effectiveFrom.add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1));
+      }
+
       final result = await _api.getBills(
         status: status,
         tableId: tableId,
-        from: from,
-        to: to,
+        from: effectiveFrom,
+        to: effectiveTo,
       );
       final list = (result['data'] as List<dynamic>? ?? []);
       bills.assignAll(
