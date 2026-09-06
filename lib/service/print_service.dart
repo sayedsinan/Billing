@@ -53,15 +53,15 @@ class PrintService {
   Future<void> savePrinter(String printerName) =>
       _box.write(_printerKey, printerName);
 
-  /// Picks which printer to send jobs to: the saved printer (instant),
-  /// or if not set, queries Windows for installed printers once.
+  /// Picks which printer to send jobs to: the saved printer if connected,
+  /// otherwise queries Windows for the first available printer.
   Future<String?> resolvePrinter() async {
-    final saved = savedPrinter;
-    if (saved != null && saved.isNotEmpty) {
-      return saved;
-    }
     final printers = await getAvailablePrinters();
     if (printers.isEmpty) return null;
+    final saved = savedPrinter;
+    if (saved != null && saved.isNotEmpty && printers.contains(saved)) {
+      return saved;
+    }
     return printers.first;
   }
 

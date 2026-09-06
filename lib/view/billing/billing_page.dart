@@ -724,12 +724,14 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
     }
 
     try {
-      await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
-      await PrintService.instance.printBill(bill);
+      final printTask = PrintService.instance.printBill(bill);
+      final apiTask = () async {
+        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
+        await widget.controller.fetchTables();
+      }();
 
-      // Empty table in DB and local list
-      await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
-      await widget.controller.fetchTables();
+      await Future.wait([printTask, apiTask]);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -775,12 +777,14 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
     }
 
     try {
-      await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
-      await PrintService.instance.printBillWithKOT(bill);
+      final printTask = PrintService.instance.printBillWithKOT(bill);
+      final apiTask = () async {
+        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
+        await widget.controller.fetchTables();
+      }();
 
-      // Empty table in DB and local list
-      await _saveTableInternal(overrideStatus: TableStatus.empty, clearItems: true);
-      await widget.controller.fetchTables();
+      await Future.wait([printTask, apiTask]);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

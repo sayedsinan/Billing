@@ -182,8 +182,12 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       final bill = _generatedBill ?? await _createDirectBill(validItems);
       if (bill != null) {
         _generatedBill = bill;
-        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
-        await PrintService.instance.printBill(bill);
+
+        // Print and mark paid concurrently for instant thermal output
+        final printTask = PrintService.instance.printBill(bill);
+        final apiTask = ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await Future.wait([printTask, apiTask]);
+
         _resetForNewOrder();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -233,8 +237,12 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
       final bill = _generatedBill ?? await _createDirectBill(validItems);
       if (bill != null) {
         _generatedBill = bill;
-        await ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
-        await PrintService.instance.printBillWithKOT(bill);
+
+        // Print KOT & Bill and mark paid concurrently
+        final printTask = PrintService.instance.printBillWithKOT(bill);
+        final apiTask = ApiService.instance.markBillPaid(bill.id, paymentMethod: 'cash');
+        await Future.wait([printTask, apiTask]);
+
         _resetForNewOrder();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
