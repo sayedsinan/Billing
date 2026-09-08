@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:test_bill/view/home_page.dart';
-
-import '../../core/constants/colors.dart';
+import 'package:test_bill/theme/colors.dart';
 
 class BillRow extends StatelessWidget {
   final String id, customer, amount;
@@ -16,7 +14,7 @@ class BillRow extends StatelessWidget {
           Text(
             id,
             style: const TextStyle(
-              color: AppColors.kTextGray,
+              color: kTextGray,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -25,19 +23,18 @@ class BillRow extends StatelessWidget {
           Expanded(
             child: Text(
               customer,
-              style: const TextStyle(color: AppColors.kTextDark, fontSize: 13),
+              style: const TextStyle(color: kTextDark, fontSize: 13),
             ),
           ),
           Text(
             amount,
             style: const TextStyle(
-              color: AppColors.kTextDark,
+              color: kTextDark,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
           ),
           const SizedBox(width: 12),
-         
         ],
       ),
     );

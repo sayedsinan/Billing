@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/controller/table_controller.dart';
-import 'package:test_bill/core/constants/colors.dart';
 import 'package:test_bill/models/table_model.dart';
 import 'package:test_bill/service/print_service.dart';
+import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/widgets/bill_receipt_preview.dart';
 
 class WaiterOrderSheet extends StatefulWidget {
@@ -89,7 +89,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
         'Order Sent & KOT Printed',
         'Order for Table ${widget.table.tableId} sent to Kitchen & Billing Desk!',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.kGreen,
+        backgroundColor: kGreen,
         colorText: Colors.white,
       );
     } else {
@@ -160,7 +160,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
       child: Container(
         height: MediaQuery.of(context).size.height * 0.82,
         decoration: const BoxDecoration(
-          color: AppColors.kWhite,
+          color: kWhite,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -185,10 +185,10 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.kBlue.withOpacity(0.1),
+                      color: kBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.restaurant_menu_rounded, color: AppColors.kBlue, size: 24),
+                    child: const Icon(Icons.restaurant_menu_rounded, color: kBlue, size: 24),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -200,12 +200,12 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.kTextDark,
+                            color: kTextDark,
                           ),
                         ),
                         Text(
                           '${_items.length} items • Subtotal: ₹${_subtotal.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 12, color: AppColors.kSubtext),
+                          style: const TextStyle(fontSize: 12, color: kSubtext),
                         ),
                       ],
                     ),
@@ -226,7 +226,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: AppColors.kBgGray,
+                color: kBgGray,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.grey.shade300),
               ),
@@ -238,14 +238,14 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _viewMode == 0 ? AppColors.kBlue : Colors.transparent,
+                          color: _viewMode == 0 ? kBlue : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           'Order Items',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _viewMode == 0 ? Colors.white : AppColors.kSubtext,
+                            color: _viewMode == 0 ? Colors.white : kSubtext,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -259,14 +259,14 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _viewMode == 1 ? AppColors.kBlue : Colors.transparent,
+                          color: _viewMode == 1 ? kBlue : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           'Bill Preview',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _viewMode == 1 ? Colors.white : AppColors.kSubtext,
+                            color: _viewMode == 1 ? Colors.white : kSubtext,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -287,7 +287,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                           'KOT Preview',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _viewMode == 2 ? Colors.white : AppColors.kSubtext,
+                            color: _viewMode == 2 ? Colors.white : kSubtext,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -344,7 +344,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                             SizedBox(height: 12),
                             Text(
                               'No items added to this table yet',
-                              style: TextStyle(color: AppColors.kSubtext, fontSize: 14),
+                              style: TextStyle(color: kSubtext, fontSize: 14),
                             ),
                           ],
                         ),
@@ -358,7 +358,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                           return Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppColors.kBgGray,
+                              color: kBgGray,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: Colors.grey.shade200),
                             ),
@@ -373,13 +373,13 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,
-                                          color: AppColors.kTextDark,
+                                          color: kTextDark,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         '₹${item.rate.toStringAsFixed(2)} each',
-                                        style: const TextStyle(fontSize: 12, color: AppColors.kSubtext),
+                                        style: const TextStyle(fontSize: 12, color: kSubtext),
                                       ),
                                     ],
                                   ),
@@ -397,7 +397,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                                       IconButton(
                                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         padding: EdgeInsets.zero,
-                                        icon: const Icon(Icons.remove_rounded, size: 16, color: AppColors.kRed),
+                                        icon: const Icon(Icons.remove_rounded, size: 16, color: kRed),
                                         onPressed: () => _updateQuantity(i, -1),
                                       ),
                                       Padding(
@@ -413,7 +413,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                                       IconButton(
                                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         padding: EdgeInsets.zero,
-                                        icon: const Icon(Icons.add_rounded, size: 16, color: AppColors.kGreen),
+                                        icon: const Icon(Icons.add_rounded, size: 16, color: kGreen),
                                         onPressed: () => _updateQuantity(i, 1),
                                       ),
                                     ],
@@ -430,7 +430,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: AppColors.kBlue,
+                                      color: kBlue,
                                     ),
                                   ),
                                 ),
@@ -461,14 +461,14 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                   children: [
                     const Text(
                       'Total Amount:',
-                      style: TextStyle(fontSize: 14, color: AppColors.kSubtext),
+                      style: TextStyle(fontSize: 14, color: kSubtext),
                     ),
                     Text(
                       '₹${_subtotal.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.kBlue,
+                        color: kBlue,
                       ),
                     ),
                   ],
@@ -512,7 +512,7 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                         height: 50,
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.kBlue,
+                            backgroundColor: kBlue,
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

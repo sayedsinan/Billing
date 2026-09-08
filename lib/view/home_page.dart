@@ -85,10 +85,11 @@ class _HomePageState extends State<HomePage> {
             width: _sidebarCollapsed ? 72 : 240,
             decoration: const BoxDecoration(
               color: AppColors.kSidebarBg,
+              border: const Border(right: BorderSide(color: Color(0xFF334155), width: 1)),
               boxShadow: [
                 BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 12,
+                  color: Color(0x0A000000),
+                  blurRadius: 10,
                   offset: Offset(2, 0),
                 ),
               ],
@@ -99,7 +100,7 @@ class _HomePageState extends State<HomePage> {
                 Container(
                   height: 70,
                   padding: EdgeInsets.symmetric(horizontal: _sidebarCollapsed ? 8 : 16),
-                  decoration: const BoxDecoration(color: Color(0xFF122540)),
+                  decoration: const BoxDecoration(color: AppColors.kSidebarHeader),
                   child: _sidebarCollapsed
                       ? Center(
                           child: InkWell(
@@ -224,7 +225,7 @@ class _HomePageState extends State<HomePage> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F2035),
+                        color: AppColors.kSidebarHeader,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(

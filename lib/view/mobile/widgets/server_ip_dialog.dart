@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:test_bill/core/constants/colors.dart';
 import 'package:test_bill/service/api_service.dart';
+import 'package:test_bill/theme/colors.dart';
 
 class ServerIpDialog extends StatefulWidget {
   const ServerIpDialog({super.key});
@@ -31,7 +31,7 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Server URL set to: ${_api.baseUrl}'),
-        backgroundColor: AppColors.kBlue,
+        backgroundColor: kBlue,
       ),
     );
   }
@@ -42,9 +42,9 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: const [
-          Icon(Icons.cloud_sync_rounded, color: AppColors.kBlue),
+      title: const Row(
+        children: [
+          Icon(Icons.cloud_sync_rounded, color: kBlue),
           SizedBox(width: 10),
           Text(
             'Backend Server Address',
@@ -63,16 +63,16 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isCloud ? AppColors.kBlue.withOpacity(0.12) : AppColors.kBgGray,
+                color: isCloud ? kBlue.withOpacity(0.12) : kBgGray,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isCloud ? AppColors.kBlue : Colors.grey.shade300,
+                  color: isCloud ? kBlue : Colors.grey.shade300,
                   width: isCloud ? 1.5 : 1,
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.cloud_done_rounded, color: AppColors.kBlue, size: 22),
+                  const Icon(Icons.cloud_done_rounded, color: kBlue, size: 22),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Column(
@@ -80,16 +80,16 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
                       children: [
                         Text(
                           'Hosted Cloud Server',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.kTextDark),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kTextDark),
                         ),
                         Text(
                           'https://billing-backend-hd2t.onrender.com/api',
-                          style: TextStyle(fontSize: 10, color: AppColors.kSubtext),
+                          style: TextStyle(fontSize: 10, color: kSubtext),
                         ),
                       ],
                     ),
                   ),
-                  if (isCloud) const Icon(Icons.check_circle_rounded, color: AppColors.kBlue, size: 18),
+                  if (isCloud) const Icon(Icons.check_circle_rounded, color: kBlue, size: 18),
                 ],
               ),
             ),
@@ -98,7 +98,7 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
           const SizedBox(height: 16),
           const Text(
             'Or connect to Local PC Wi-Fi Server (e.g. 192.168.1.15:3000):',
-            style: TextStyle(fontSize: 12, color: AppColors.kSubtext, fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 12, color: kSubtext, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
 
@@ -116,7 +116,7 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
           const SizedBox(height: 10),
           Text(
             'Active API Endpoint:\n${_api.baseUrl}',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.kTextDark),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTextDark),
           ),
         ],
       ),
@@ -127,7 +127,7 @@ class _ServerIpDialogState extends State<ServerIpDialog> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.kBlue,
+            backgroundColor: kBlue,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
