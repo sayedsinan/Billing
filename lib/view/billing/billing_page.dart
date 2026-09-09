@@ -282,7 +282,7 @@ class _TableOrderPageState extends State<TableOrderPage> {
 Future<void> _printTableBill(BuildContext ctx, DiningTable table) async {
   try {
     debugPrint('🖨️ [KOT] Fetching latest bill for table ${table.tableId} (id: ${table.id})');
-    final result = await ApiService.instance.getBills(tableId: table.id);
+    final result = await ApiService.instance.getBills(tableId: table.tableId, limit: 1);
     final data = (result['data'] as List<dynamic>? ?? []);
     debugPrint('🖨️ [KOT] Bills found: ${data.length}');
 

@@ -53,16 +53,25 @@ class PrintService {
   Future<void> savePrinter(String printerName) =>
       _box.write(_printerKey, printerName);
 
-  /// Picks which printer to send jobs to: the saved printer if connected,
-  /// otherwise queries Windows for the first available printer.
-  Future<String?> resolvePrinter() async {
-    final printers = await getAvailablePrinters();
-    if (printers.isEmpty) return null;
+  /// Picks which printer to send jobs to. Returns the saved printer instantly if available
+  /// to avoid slow Windows Print Spooler (EnumPrinters) RPC delays. Passes forceRefresh=true
+  /// to re-scan system printers.
+  Future<String?> resolvePrinter({bool forceRefresh = false}) async {
     final saved = savedPrinter;
+    if (!forceRefresh && saved != null && saved.isNotEmpty) {
+      return saved;
+    }
+    final printers = await getAvailablePrinters();
+    if (printers.isEmpty) return saved;
     if (saved != null && saved.isNotEmpty && printers.contains(saved)) {
       return saved;
     }
-    return printers.first;
+    if (printers.isNotEmpty) {
+      final selected = printers.first;
+      await savePrinter(selected);
+      return selected;
+    }
+    return null;
   }
 
   // ── Printing ─────────────────────────────────────────────────────────
@@ -74,7 +83,7 @@ class PrintService {
       debugPrint("Direct thermal printing is only supported on Windows.");
       return;
     }
-    final target = printerName ?? await resolvePrinter();
+    var target = printerName ?? await resolvePrinter();
     if (target == null || target.isEmpty) {
       throw PrintException(
         'No printer found. Make sure your thermal printer is connected and selected in Settings.',
@@ -90,6 +99,20 @@ class PrintService {
         useRawDatatype: true, // required for thermal/ESC-POS printers
       );
     } catch (e) {
+      // If printing failed with cached printer, try resolving fresh from Windows once
+      if (printerName == null) {
+        final freshTarget = await resolvePrinter(forceRefresh: true);
+        if (freshTarget != null && freshTarget != target) {
+          try {
+            await WindowsPrinter.printRawData(
+              printerName: freshTarget,
+              data: bytes,
+              useRawDatatype: true,
+            );
+            return;
+          } catch (_) {}
+        }
+      }
       throw PrintException('Could not print bill ${bill.billNumber}: $e');
     }
   }

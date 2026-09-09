@@ -317,6 +317,7 @@ class ApiService {
     String? tableId,
     DateTime? from,
     DateTime? to,
+    int? limit,
   }) async {
     final body = await _request(
       () => _dio.get(
@@ -326,6 +327,7 @@ class ApiService {
           if (tableId != null) 'tableId': tableId,
           if (from != null) 'from': from.toIso8601String(),
           if (to != null) 'to': to.toIso8601String(),
+          if (limit != null) 'limit': limit,
         },
       ),
       fullResponse: true,
