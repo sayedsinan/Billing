@@ -31,6 +31,7 @@ class PrintService {
   // ── Shop details shown on every receipt — adjust to taste ─────────────
   String get shopName => _box.read<String>('shop_name') ?? 'Grillo';
   String get shopAddress => _box.read<String>('shop_address') ?? '';
+  String get shopPhone => _box.read<String>('shop_phone') ?? '';
   String get footerLine => _box.read<String>('footer_note') ?? 'Thank you, visit again!';
 
   // ── Rounds a price for display — 29.99 -> 30 ──
@@ -133,7 +134,11 @@ class PrintService {
     if (shopAddress.isNotEmpty) {
       builder.line(shopAddress, style: center);
     }
-    builder.line('Bill #${bill.billNumber}', style: center);
+    final phone = shopPhone.isNotEmpty ? shopPhone : '';
+    builder.line('Ph: $phone', style: center);
+    builder.separator();
+
+    builder.line('Bill #${bill.billNumber}', style: centerBold);
     builder.line(_formatDate(bill.createdAt), style: center);
     builder.separator();
 
