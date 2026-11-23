@@ -57,15 +57,17 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   /// instead of creating a duplicate line.
   void _addProductToOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
+      final idx = _items.indexWhere((i) => i.name == p.name);
+      final newQty = idx >= 0 ? _items[idx].qty + 1 : 1.0;
+      final rate = PortionHelper.effectiveRateForQty(p, newQty);
       if (idx >= 0) {
         _items[idx] = OrderItem(
           name: p.name,
-          qty: _items[idx].qty + 1,
-          rate: p.price,
+          qty: newQty,
+          rate: rate,
         );
       } else {
-        _items.add(OrderItem(name: p.name, qty: 1, rate: p.price));
+        _items.add(OrderItem(name: p.name, qty: newQty, rate: rate));
       }
     });
   }
@@ -74,13 +76,14 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   /// it hits 0, so the block goes back to its normal "tap to add" state.
   void _decreaseProductFromOrder(Product p) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
+      final idx = _items.indexWhere((i) => i.name == p.name);
       if (idx < 0) return;
       final newQty = _items[idx].qty - 1;
       if (newQty <= 0) {
         _items.removeAt(idx);
       } else {
-        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: p.price);
+        final rate = PortionHelper.effectiveRateForQty(p, newQty);
+        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: rate);
       }
     });
   }
@@ -88,15 +91,16 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
   /// Directly sets a product's quantity (supports typed numeric or F/H/Q input).
   void _setProductQty(Product p, double newQty) {
     setState(() {
-      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
+      final idx = _items.indexWhere((i) => i.name == p.name);
       if (newQty <= 0) {
         if (idx >= 0) _items.removeAt(idx);
         return;
       }
+      final rate = PortionHelper.effectiveRateForQty(p, newQty);
       if (idx >= 0) {
-        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: p.price);
+        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: rate);
       } else {
-        _items.add(OrderItem(name: p.name, qty: newQty, rate: p.price));
+        _items.add(OrderItem(name: p.name, qty: newQty, rate: rate));
       }
     });
   }
@@ -502,7 +506,7 @@ class _TakeoutBillDialogState extends State<TakeoutBillDialog> {
                                           (p) => _TakeoutProductBlock(
                                             product: p,
                                             qtyInOrder: _items
-                                                .where((i) => i.name == p.name && i.rate == p.price)
+                                                .where((i) => i.name == p.name)
                                                 .fold(0.0, (s, i) => s + i.qty),
                                             onTap: () => _addProductToOrder(p),
                                             onDecrease: () =>
@@ -952,12 +956,18 @@ class _TakeoutProductBlock extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '₹${product.price.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: kDarkBlue,
-                    fontWeight: FontWeight.w700,
+                Flexible(
+                  child: Text(
+                    product.hasPortionPrices && !inOrder
+                        ? 'Q₹${product.effectiveQuarterPrice.toStringAsFixed(0)} H₹${product.effectiveHalfPrice.toStringAsFixed(0)} F₹${product.effectiveFullPrice.toStringAsFixed(0)}'
+                        : '₹${(inOrder && product.hasPortionPrices ? PortionHelper.calculatePortionTotal(product, qtyInOrder) : product.price).toStringAsFixed(0)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: product.hasPortionPrices && !inOrder ? 10 : 12,
+                      color: kDarkBlue,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 if (!inOrder)
@@ -1067,13 +1077,22 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
     super.dispose();
   }
 
-  void _notify() {
+  void _notify({bool qtyChanged = false}) {
     final parsedQty = PortionHelper.parseQtyInput(_qtyCtrl.text, allowFHQ: _isPortion);
+    final effectiveQty = (parsedQty != null && parsedQty > 0) ? parsedQty : widget.item.qty;
+    double rate = double.tryParse(_rateCtrl.text) ?? 0;
+    if (qtyChanged) {
+      final prod = PortionHelper.findProductByName(_nameCtrl.text);
+      if (prod != null && prod.hasPortionPrices) {
+        rate = PortionHelper.effectiveRateForQty(prod, effectiveQty);
+        _rateCtrl.text = rate.toStringAsFixed(0);
+      }
+    }
     widget.onChanged(
       OrderItem(
         name: _nameCtrl.text,
-        qty: (parsedQty != null && parsedQty > 0) ? parsedQty : widget.item.qty,
-        rate: double.tryParse(_rateCtrl.text) ?? 0,
+        qty: effectiveQty,
+        rate: rate,
       ),
     );
   }
@@ -1083,7 +1102,10 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
     final isPortion = _isPortion;
     final parsedQty =
         PortionHelper.parseQtyInput(_qtyCtrl.text, allowFHQ: isPortion) ?? widget.item.qty;
-    final total = parsedQty * (double.tryParse(_rateCtrl.text) ?? 0);
+    final prod = PortionHelper.findProductByName(_nameCtrl.text);
+    final total = (prod != null && prod.hasPortionPrices)
+        ? PortionHelper.calculatePortionTotal(prod, parsedQty)
+        : parsedQty * (double.tryParse(_rateCtrl.text) ?? 0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1104,7 +1126,7 @@ class _TakeoutItemRowState extends State<_TakeoutItemRow> {
               controller: _qtyCtrl,
               focusNode: _qtyFocus,
               onChanged: (_) {
-                _notify();
+                _notify(qtyChanged: true);
                 setState(() {});
               },
               decoration: _inputDec(isPortion ? 'Q/H/F' : '1'),

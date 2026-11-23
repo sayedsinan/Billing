@@ -78,10 +78,13 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
     setState(() {
       final items = _draftOrders[_selectedTable!.id] ?? [];
       final idx = items.indexWhere((i) => i.name == product.name);
+      final newQty = idx >= 0 ? items[idx].qty + 1 : 1.0;
+      final rate = PortionHelper.effectiveRateForQty(product, newQty);
       if (idx >= 0) {
-        items[idx].qty += 1;
+        items[idx].qty = newQty;
+        items[idx].rate = rate;
       } else {
-        items.add(OrderItem(name: product.name, qty: 1, rate: product.price));
+        items.add(OrderItem(name: product.name, qty: newQty, rate: rate));
       }
       _draftOrders[_selectedTable!.id] = items;
     });
@@ -679,7 +682,9 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${p.category} • ₹${p.price.toStringAsFixed(2)}',
+                              p.hasPortionPrices
+                                  ? '${p.category} • Q₹${p.effectiveQuarterPrice.toStringAsFixed(0)} H₹${p.effectiveHalfPrice.toStringAsFixed(0)} F₹${p.effectiveFullPrice.toStringAsFixed(0)}'
+                                  : '${p.category} • ₹${p.price.toStringAsFixed(2)}',
                               style: const TextStyle(fontSize: 12, color: AppColors.kSubtext),
                             ),
                           ],

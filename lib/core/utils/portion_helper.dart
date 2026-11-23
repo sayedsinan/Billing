@@ -131,4 +131,47 @@ class PortionHelper {
       qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString();
 
   /// Formats quantity for display/printing given an item name (uses F/H/Q for
-  /// Ma
+  /// Mandi/portion items, plain numbers for everything else).
+  static String formatQtyForItem(String name, double qty, {bool? forcePortion}) {
+    final isPortion = forcePortion ?? isPortionItemByName(name);
+    return isPortion ? formatPortionQty(qty) : formatPlainQty(qty);
+  }
+
+  /// Parses typed quantity input into numeric qty:
+  ///   - Accepts plain numbers ("1", "2", "3", "4", "0", "2.5")
+  ///   - When [allowFHQ] is true, also accepts F/H/Q combinations:
+  ///     "Q" -> 1, "H" -> 2, "HQ"/"H+Q" -> 3, "F" -> 4,
+  ///     "FQ"/"F+Q" -> 5, "FH"/"F+H" -> 6, "FHQ"/"F+H+Q" -> 7, "2F" -> 8, etc.
+  static double? parseQtyInput(String raw, {bool allowFHQ = true}) {
+    final s = raw.trim().toUpperCase().replaceAll(' ', '');
+    if (s.isEmpty) return null;
+
+    final plainNum = double.tryParse(s);
+    if (plainNum != null) return plainNum;
+
+    if (!allowFHQ) return null;
+
+    final cleaned = s.replaceAll('+', '');
+    final tokenRe = RegExp(r'(\d*\.?\d*)([FHQ])');
+    final matches = tokenRe.allMatches(cleaned).toList();
+    if (matches.isEmpty) return null;
+
+    final consumed = matches.map((m) => m.group(0)!).join();
+    if (consumed != cleaned) return null;
+
+    double total = 0;
+    for (final m in matches) {
+      final multStr = m.group(1)!;
+      final letter = m.group(2)!;
+      final mult = multStr.isEmpty ? 1.0 : (double.tryParse(multStr) ?? 1.0);
+      final unitVal = switch (letter) {
+        'Q' => 1.0,
+        'H' => 2.0,
+        'F' => 4.0,
+        _ => 0.0,
+      };
+      total += mult * unitVal;
+    }
+    return total;
+  }
+}

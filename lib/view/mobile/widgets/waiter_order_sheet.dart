@@ -53,6 +53,10 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
         _items.removeAt(index);
       } else {
         _items[index].qty = updated;
+        final prod = PortionHelper.findProductByName(_items[index].name);
+        if (prod != null && prod.hasPortionPrices) {
+          _items[index].rate = PortionHelper.effectiveRateForQty(prod, updated);
+        }
       }
     });
   }
@@ -63,6 +67,10 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
         _items.removeAt(index);
       } else {
         _items[index].qty = newQty;
+        final prod = PortionHelper.findProductByName(_items[index].name);
+        if (prod != null && prod.hasPortionPrices) {
+          _items[index].rate = PortionHelper.effectiveRateForQty(prod, newQty);
+        }
       }
     });
   }

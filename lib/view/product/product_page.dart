@@ -497,17 +497,23 @@ class _ProductCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    product.unit,
+                    product.hasPortionPrices ? 'Q/H/F' : product.unit,
                     style: const TextStyle(color: kTextGray, fontSize: 10),
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  '₹${product.price.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: kBlue,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
+                Flexible(
+                  child: Text(
+                    product.hasPortionPrices
+                        ? 'Q₹${product.effectiveQuarterPrice.toStringAsFixed(0)} H₹${product.effectiveHalfPrice.toStringAsFixed(0)} F₹${product.effectiveFullPrice.toStringAsFixed(0)}'
+                        : '₹${product.price.toStringAsFixed(0)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: kBlue,
+                      fontWeight: FontWeight.w800,
+                      fontSize: product.hasPortionPrices ? 11.5 : 15,
+                    ),
                   ),
                 ),
               ],
@@ -534,9 +540,14 @@ class ProductEditorDialog extends StatefulWidget {
 }
 
 class _ProductEditorDialogState extends State<ProductEditorDialog> {
-  late TextEditingController _name, _price, _unit, _desc, _catCtrl;
+  late TextEditingController _name, _price, _halfPrice, _fullPrice, _unit, _desc, _catCtrl;
   String _category = 'Grocery';
   bool _customCat = false;
+
+  String _fmtNum(double? v) {
+    if (v == null) return '';
+    return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+  }
 
   @override
   void initState() {
@@ -544,12 +555,10 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
     final e = widget.existing;
     _name = TextEditingController(text: e?.name ?? '');
     _price = TextEditingController(
-      text: e != null
-          ? (e.price == e.price.roundToDouble()
-              ? e.price.toStringAsFixed(0)
-              : e.price.toString())
-          : '',
+      text: e != null ? _fmtNum(e.quarterPrice ?? e.price) : '',
     );
+    _halfPrice = TextEditingController(text: _fmtNum(e?.halfPrice));
+    _fullPrice = TextEditingController(text: _fmtNum(e?.fullPrice));
     _unit = TextEditingController(text: e?.unit ?? 'pcs');
     _desc = TextEditingController(text: e?.description ?? '');
     _catCtrl = TextEditingController();
@@ -559,7 +568,7 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
 
   @override
   void dispose() {
-    for (final c in [_name, _price, _unit, _desc, _catCtrl]) c.dispose();
+    for (final c in [_name, _price, _halfPrice, _fullPrice, _unit, _desc, _catCtrl]) c.dispose();
     super.dispose();
   }
 
@@ -577,12 +586,42 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
     if (parsedPrice == null || parsedPrice < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter a valid non-negative price'),
+          content: Text('Enter a valid non-negative Quarter / Base price'),
           backgroundColor: kRed,
         ),
       );
       return;
     }
+
+    double? parsedHalf;
+    if (_halfPrice.text.trim().isNotEmpty) {
+      parsedHalf = double.tryParse(_halfPrice.text.trim());
+      if (parsedHalf == null || parsedHalf < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter a valid non-negative Half price'),
+            backgroundColor: kRed,
+          ),
+        );
+        return;
+      }
+    }
+
+    double? parsedFull;
+    if (_fullPrice.text.trim().isNotEmpty) {
+      parsedFull = double.tryParse(_fullPrice.text.trim());
+      if (parsedFull == null || parsedFull < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter a valid non-negative Full price'),
+            backgroundColor: kRed,
+          ),
+        );
+        return;
+      }
+    }
+
+    final hasPortions = parsedHalf != null || parsedFull != null;
     final cat = _customCat ? _catCtrl.text.trim() : _category;
     // For a new product the id is assigned by the server; for an edit we
     // keep the existing id so the controller can PUT to the right endpoint.
@@ -591,7 +630,10 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
       name: _name.text.trim(),
       category: cat.isEmpty ? 'General' : cat,
       price: parsedPrice,
-      unit: _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim(),
+      quarterPrice: hasPortions ? parsedPrice : null,
+      halfPrice: parsedHalf,
+      fullPrice: parsedFull,
+      unit: _unit.text.trim().isEmpty ? (hasPortions ? 'qtr' : 'pcs') : _unit.text.trim(),
       description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
       active: widget.existing?.active ?? true,
     );
@@ -903,19 +945,43 @@ Future<void> _bulkUpload(
                     children: [
                       Expanded(
                         child: _lf(
-                          'Price (₹) *',
+                          'Qtr / Price (₹) *',
                           _price,
-                          hint: '0',
+                          hint: '200',
                           kb: TextInputType.number,
                           num: true,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: _lf('Unit', _unit, hint: 'pcs, plate, qtr (F/H/Q)...'),
+                        child: _lf(
+                          'Half (₹)',
+                          _halfPrice,
+                          hint: '380',
+                          kb: TextInputType.number,
+                          num: true,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _lf(
+                          'Full (₹)',
+                          _fullPrice,
+                          hint: '720',
+                          kb: TextInputType.number,
+                          num: true,
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Enter Qtr, Half & Full prices for portion items (e.g. Mandi). Leave Half & Full empty for single-price items.',
+                    style: TextStyle(color: kTextGray, fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _lf('Unit', _unit, hint: 'pcs, plate, qtr (F/H/Q)...'),
                   const SizedBox(height: 14),
 
                   _lf(
