@@ -4,6 +4,7 @@ import 'package:test_bill/controller/bill_controller.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/widgets/billing_row.dart';
+import 'package:test_bill/view/widgets/sales_report_print_dialog.dart';
 import 'package:test_bill/view/widgets/section_card.dart';
 
 enum _DashRange { today, yesterday, week, month, all }
@@ -178,8 +179,8 @@ class _DashboardContentState extends State<DashboardContent> {
       final rangeBills = _billsInRange(allBills, rangeStart, rangeEnd);
       final prevBills = _billsInRange(allBills, prevStart, prevEnd);
 
-      final rangeSales = rangeBills.fold(0.0, (s, b) => s + b.grandTotal);
-      final prevSales = prevBills.fold(0.0, (s, b) => s + b.grandTotal);
+      final rangeSales = rangeBills.fold(0.0, (s, b) => s + (b.subtotal - b.discount));
+      final prevSales = prevBills.fold(0.0, (s, b) => s + (b.subtotal - b.discount));
 
       final salesChangePct = prevSales == 0
           ? (rangeSales > 0 ? 100.0 : 0.0)
@@ -289,6 +290,34 @@ class _DashboardContentState extends State<DashboardContent> {
                   () {
                     setState(() => _range = _DashRange.all);
                     _billController.fetchBills(allTime: true);
+                  },
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kBlue,
+                    foregroundColor: kWhite,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  icon: const Icon(Icons.print_rounded, size: 16),
+                  label: const Text(
+                    'Print Sales Report',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                  onPressed: () {
+                    final preset = switch (_range) {
+                      _DashRange.yesterday => SalesReportPreset.yesterday,
+                      _DashRange.month => SalesReportPreset.thisMonth,
+                      _ => SalesReportPreset.today,
+                    };
+                    SalesReportPrintDialog.show(context, initialPreset: preset);
                   },
                 ),
               ],

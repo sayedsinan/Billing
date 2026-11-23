@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:test_bill/controller/bill_controller.dart';
 import 'package:test_bill/controller/product_controller.dart';
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/shift/cash_register_page.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
+import 'package:test_bill/view/widgets/sales_report_print_dialog.dart';
 
 // ─── Reports Page — Orders Log & Category/Item Sales Report ───────────────────
 class ReportsPage extends StatefulWidget {
@@ -74,29 +77,18 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  void _confirmDelete(BuildContext ctx, BillController controller, Bill bill) {
-    showDialog(
-      context: ctx,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete order?', style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text(
+  void _confirmDelete(BuildContext ctx, BillController controller, Bill bill) async {
+    final verified = await PasswordConfirmDialog.verify(
+      ctx,
+      title: 'Delete Bill #${bill.billNumber}',
+      message:
           'Bill #${bill.billNumber} (₹${bill.grandTotal.toStringAsFixed(0)}) will be permanently removed. '
-          'This also updates today\'s revenue on the dashboard.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () async {
-              Navigator.pop(dialogCtx);
-              await controller.deleteBill(bill.id);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+          'Enter your login password to confirm.',
+      confirmLabel: 'Delete Bill',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await controller.deleteBill(bill.id);
   }
 
   /// Helper to classify items into categories like "Shawarma", "Beverages", "Burgers", etc.
@@ -263,6 +255,36 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
 
                   const Spacer(),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kBlue,
+                      foregroundColor: kWhite,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.print_rounded, size: 16),
+                    label: const Text('Print Sales', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    onPressed: () {
+                      final now = DateTime.now();
+                      final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+                      final isYesterday = _selectedDate.year == yesterday.year &&
+                          _selectedDate.month == yesterday.month &&
+                          _selectedDate.day == yesterday.day;
+                      if (_isToday) {
+                        SalesReportPrintDialog.show(context, initialPreset: SalesReportPreset.today);
+                      } else if (isYesterday) {
+                        SalesReportPrintDialog.show(context, initialPreset: SalesReportPreset.yesterday);
+                      } else {
+                        SalesReportPrintDialog.show(
+                          context,
+                          initialPreset: SalesReportPreset.custom,
+                          initialCustomRange: DateTimeRange(start: _dayStart, end: _dayStart),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   _DateNav(
                     label: _dateLabel,
                     isToday: _isToday,
@@ -1093,27 +1115,19 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
     }
   }
 
-  void _delete() {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete order?', style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text('Bill #${widget.bill.billNumber} (₹${widget.bill.grandTotal.toStringAsFixed(0)}) will be permanently removed.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () async {
-              Navigator.pop(dialogCtx);
-              await widget.controller.deleteBill(widget.bill.id);
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  Future<void> _delete() async {
+    final verified = await PasswordConfirmDialog.verify(
+      context,
+      title: 'Delete Bill #${widget.bill.billNumber}',
+      message:
+          'Bill #${widget.bill.billNumber} (₹${widget.bill.grandTotal.toStringAsFixed(0)}) will be permanently removed. '
+          'Enter your login password to confirm.',
+      confirmLabel: 'Delete Bill',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await widget.controller.deleteBill(widget.bill.id);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -1200,7 +1214,7 @@ class _BillDetailDialogState extends State<_BillDetailDialog> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        '${bill.items[i].qty == bill.items[i].qty.toInt() ? bill.items[i].qty.toInt() : bill.items[i].qty} × ₹${bill.items[i].rate.toStringAsFixed(0)}',
+                                        '${PortionHelper.formatQtyForItem(bill.items[i].name, bill.items[i].qty)} × ₹${bill.items[i].rate.toStringAsFixed(0)}',
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(fontSize: 12, color: kTextGray),
                                       ),

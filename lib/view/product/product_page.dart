@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/models/product_model.dart';
 import 'package:test_bill/theme/colors.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -31,13 +32,16 @@ class _ProductsPageState extends State<ProductsPage> {
         final loading = controller.isLoading.value;
         final err = controller.error.value;
 
+        final activeFilterCat =
+            (_filterCat != null && cats.contains(_filterCat)) ? _filterCat : null;
+
         final filtered = all.where((p) {
           final q = _search.toLowerCase();
           final ms =
               q.isEmpty ||
               p.name.toLowerCase().contains(q) ||
               p.category.toLowerCase().contains(q);
-          final mc = _filterCat == null || p.category == _filterCat;
+          final mc = activeFilterCat == null || p.category == activeFilterCat;
           return ms && mc;
         }).toList();
 
@@ -107,7 +111,7 @@ class _ProductsPageState extends State<ProductsPage> {
           children: [
             _chip(
               'All',
-              _filterCat == null,
+              activeFilterCat == null,
               () => setState(() => _filterCat = null),
             ),
             ...cats.map(
@@ -115,7 +119,7 @@ class _ProductsPageState extends State<ProductsPage> {
                 padding: const EdgeInsets.only(left: 6),
                 child: _chip(
                   c,
-                  _filterCat == c,
+                  activeFilterCat == c,
                   () => setState(() => _filterCat = c),
                 ),
               ),
@@ -332,6 +336,15 @@ class _ProductsPageState extends State<ProductsPage> {
     ProductController controller, {
     Product? existing,
   }) async {
+    if (existing != null) {
+      final verified = await PasswordConfirmDialog.verify(
+        ctx,
+        title: 'Edit Menu Item',
+        message: 'Enter your login password to edit "${existing.name}".',
+        confirmLabel: 'Unlock & Edit',
+      );
+      if (!verified || !ctx.mounted) return;
+    }
     await showDialog(
       context: ctx,
       barrierDismissible: false,
@@ -344,36 +357,16 @@ class _ProductsPageState extends State<ProductsPage> {
     BuildContext ctx,
     ProductController controller,
     Product p,
-  ) {
-    showDialog(
-      context: ctx,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Remove Product?',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        content: Text('"${p.name}" will be removed from the menu.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kRed,
-              foregroundColor: kWhite,
-              elevation: 0,
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await controller.removeProduct(p.id);
-            },
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+  ) async {
+    final verified = await PasswordConfirmDialog.verify(
+      ctx,
+      title: 'Delete Menu Item',
+      message: 'Enter your login password to permanently remove "${p.name}" from the menu.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await controller.removeProduct(p.id);
   }
 }
 
@@ -551,7 +544,11 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
     final e = widget.existing;
     _name = TextEditingController(text: e?.name ?? '');
     _price = TextEditingController(
-      text: e != null ? e.price.toStringAsFixed(0) : '',
+      text: e != null
+          ? (e.price == e.price.roundToDouble()
+              ? e.price.toStringAsFixed(0)
+              : e.price.toString())
+          : '',
     );
     _unit = TextEditingController(text: e?.unit ?? 'pcs');
     _desc = TextEditingController(text: e?.description ?? '');
@@ -576,6 +573,16 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
       );
       return;
     }
+    final parsedPrice = double.tryParse(_price.text.trim());
+    if (parsedPrice == null || parsedPrice < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid non-negative price'),
+          backgroundColor: kRed,
+        ),
+      );
+      return;
+    }
     final cat = _customCat ? _catCtrl.text.trim() : _category;
     // For a new product the id is assigned by the server; for an edit we
     // keep the existing id so the controller can PUT to the right endpoint.
@@ -583,9 +590,10 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
       id: widget.existing?.id ?? '',
       name: _name.text.trim(),
       category: cat.isEmpty ? 'General' : cat,
-      price: double.tryParse(_price.text) ?? 0,
+      price: parsedPrice,
       unit: _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim(),
       description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+      active: widget.existing?.active ?? true,
     );
     final ok = widget.existing == null
         ? await widget.controller.addProduct(p)
@@ -725,7 +733,11 @@ Future<void> _bulkUpload(
   }
 }
     final isEdit = widget.existing != null;
-    final cats = widget.controller.categories;
+    final cats = <String>[
+      ...widget.controller.categories,
+      if (_category.isNotEmpty && !widget.controller.categories.contains(_category))
+        _category,
+    ];
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -789,6 +801,7 @@ Future<void> _bulkUpload(
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: cats.contains(_category)
                                 ? _category
                                 : (cats.isNotEmpty ? cats.first : null),
@@ -810,12 +823,15 @@ Future<void> _bulkUpload(
                                     value: c,
                                     child: Text(
                                       c,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(fontSize: 13),
                                     ),
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setState(() => _category = v!),
+                            onChanged: (v) {
+                              if (v != null) setState(() => _category = v);
+                            },
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -896,7 +912,7 @@ Future<void> _bulkUpload(
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: _lf('Unit', _unit, hint: 'pcs, kg, L, box...'),
+                        child: _lf('Unit', _unit, hint: 'pcs, plate, qtr (F/H/Q)...'),
                       ),
                     ],
                   ),

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:test_bill/controller/table_controller.dart';
 import 'package:test_bill/controller/product_controller.dart';
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/models/table_model.dart';
 import 'package:test_bill/models/product_model.dart';
@@ -12,6 +13,8 @@ import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/billing/takeout_bill_dialog.dart';
 import 'package:test_bill/view/widgets/bill_receipt_preview.dart';
+import 'package:test_bill/view/widgets/inline_qty_control.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
 
 // ─── Table Order Page ──────────────────────────────────────────────────────────
 class TableOrderPage extends StatefulWidget {
@@ -325,26 +328,16 @@ Future<void> _printTableBill(BuildContext ctx, DiningTable table) async {
     }
   }
 }
-void _confirmDelete(BuildContext ctx, TableController controller, DiningTable table) {
-    showDialog(
-      context: ctx,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Remove Table?', style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text('Table ${table.tableId} will be removed.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () async {
-              Navigator.pop(dialogCtx);
-              await controller.removeTable(table.id);
-            },
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+void _confirmDelete(BuildContext ctx, TableController controller, DiningTable table) async {
+    final verified = await PasswordConfirmDialog.verify(
+      ctx,
+      title: 'Remove Table ${table.tableId}',
+      message: 'Enter your login password to permanently remove Table ${table.tableId}.',
+      confirmLabel: 'Remove',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await controller.removeTable(table.id);
   }
 }
 
@@ -616,6 +609,22 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
         _items.removeAt(idx);
       } else {
         _items[idx] = OrderItem(name: p.name, qty: newQty, rate: p.price);
+      }
+    });
+  }
+
+  /// Directly sets a product's quantity (supports typed numeric or F/H/Q input).
+  void _setProductQty(Product p, double newQty) {
+    setState(() {
+      final idx = _items.indexWhere((i) => i.name == p.name && i.rate == p.price);
+      if (newQty <= 0) {
+        if (idx >= 0) _items.removeAt(idx);
+        return;
+      }
+      if (idx >= 0) {
+        _items[idx] = OrderItem(name: p.name, qty: newQty, rate: p.price);
+      } else {
+        _items.add(OrderItem(name: p.name, qty: newQty, rate: p.price));
       }
     });
   }
@@ -941,6 +950,7 @@ class _TableOrderDialogState extends State<TableOrderDialog> {
                                           .fold(0.0, (s, i) => s + i.qty),
                                       onTap: () => _addProductToOrder(p),
                                       onDecrease: () => _decreaseProductFromOrder(p),
+                                      onSetQty: (q) => _setProductQty(p, q),
                                     )).toList(),
                                   ),
                                 ),
@@ -1248,27 +1258,28 @@ Widget _TotalRow(String label, String value, {Color? color, bool bold = false, b
   );
 }
 
-// ─── Product Block (tappable card, no typing needed) ──────────────────────────
+// ─── Product Block (tappable card with inline typable − qty + / F-H-Q) ────────
 class _ProductBlock extends StatelessWidget {
   final Product product;
   final double qtyInOrder;
   final VoidCallback onTap;
   final VoidCallback onDecrease;
+  final ValueChanged<double> onSetQty;
   const _ProductBlock({
     required this.product,
     required this.qtyInOrder,
     required this.onTap,
     required this.onDecrease,
+    required this.onSetQty,
   });
-
-  String get _qtyLabel => qtyInOrder == qtyInOrder.toInt() ? '${qtyInOrder.toInt()}' : '$qtyInOrder';
 
   @override
   Widget build(BuildContext context) {
     final inOrder = qtyInOrder > 0;
+    final isPortion = PortionHelper.isPortionProduct(product);
     return Container(
-      width: 140,
-      height: 92,
+      width: isPortion ? 166 : 154,
+      height: 98,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: inOrder ? kBlue.withOpacity(0.10) : kWhite,
@@ -1284,11 +1295,32 @@ class _ProductBlock extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              product.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kTextDark),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    product.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: kTextDark),
+                  ),
+                ),
+                if (isPortion) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: kOrange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: const Text(
+                      'F/H/Q',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: kOrange),
+                    ),
+                  ),
+                ],
+              ],
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1302,36 +1334,14 @@ class _ProductBlock extends StatelessWidget {
                     child: const Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
                   )
                 else
-                  // ── − qty + control, replaces the plain add icon once ordered ──
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(20)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        InkWell(
-                          onTap: onDecrease,
-                          borderRadius: BorderRadius.circular(20),
-                          child: const Padding(
-                            padding: EdgeInsets.all(2),
-                            child: Icon(Icons.remove_circle_rounded, color: kRed, size: 20),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(_qtyLabel,
-                              style: const TextStyle(color: kBlue, fontSize: 12, fontWeight: FontWeight.w800)),
-                        ),
-                        InkWell(
-                          onTap: onTap,
-                          borderRadius: BorderRadius.circular(20),
-                          child: const Padding(
-                            padding: EdgeInsets.all(2),
-                            child: Icon(Icons.add_circle_rounded, color: kGreen, size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
+                  InlineQtyControl(
+                    qty: qtyInOrder,
+                    isPortion: isPortion,
+                    accentColor: kBlue,
+                    inputWidth: isPortion ? 44 : 36,
+                    onDecrease: onDecrease,
+                    onIncrease: onTap,
+                    onSetQty: onSetQty,
                   ),
               ],
             ),
@@ -1357,13 +1367,32 @@ class _OrderItemRowState extends State<_OrderItemRow> {
   late TextEditingController _nameCtrl;
   late TextEditingController _qtyCtrl;
   late TextEditingController _rateCtrl;
+  late FocusNode _qtyFocus;
+
+  bool get _isPortion => PortionHelper.isPortionItemByName(_nameCtrl.text);
+
+  String _fmtQty(double q) =>
+      PortionHelper.formatQtyForItem(_nameCtrl.text, q, forcePortion: _isPortion);
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.item.name);
-    _qtyCtrl = TextEditingController(text: widget.item.qty == widget.item.qty.toInt() ? widget.item.qty.toInt().toString() : widget.item.qty.toString());
+    _qtyCtrl = TextEditingController(text: _fmtQty(widget.item.qty));
     _rateCtrl = TextEditingController(text: widget.item.rate == 0 ? '' : widget.item.rate.toStringAsFixed(0));
+    _qtyFocus = FocusNode()..addListener(_onQtyFocusChange);
+  }
+
+  void _onQtyFocusChange() {
+    if (_qtyFocus.hasFocus) {
+      _qtyCtrl.selection = TextSelection(baseOffset: 0, extentOffset: _qtyCtrl.text.length);
+    } else {
+      final parsed = PortionHelper.parseQtyInput(_qtyCtrl.text, allowFHQ: _isPortion);
+      final normalized = _fmtQty(parsed != null && parsed > 0 ? parsed : widget.item.qty);
+      if (_qtyCtrl.text != normalized) {
+        _qtyCtrl.text = normalized;
+      }
+    }
   }
 
   @override
@@ -1372,11 +1401,11 @@ class _OrderItemRowState extends State<_OrderItemRow> {
     // Keep the text fields in sync if the item was updated from outside
     // (e.g. tapping the same product block again bumps qty).
     if (oldWidget.item != widget.item) {
-      final newQty = widget.item.qty == widget.item.qty.toInt()
-          ? widget.item.qty.toInt().toString()
-          : widget.item.qty.toString();
       if (_nameCtrl.text != widget.item.name) _nameCtrl.text = widget.item.name;
-      if (_qtyCtrl.text != newQty) _qtyCtrl.text = newQty;
+      if (!_qtyFocus.hasFocus) {
+        final newQty = _fmtQty(widget.item.qty);
+        if (_qtyCtrl.text != newQty) _qtyCtrl.text = newQty;
+      }
       final newRate = widget.item.rate == 0 ? '' : widget.item.rate.toStringAsFixed(0);
       if (_rateCtrl.text != newRate) _rateCtrl.text = newRate;
     }
@@ -1384,6 +1413,8 @@ class _OrderItemRowState extends State<_OrderItemRow> {
 
   @override
   void dispose() {
+    _qtyFocus.removeListener(_onQtyFocusChange);
+    _qtyFocus.dispose();
     _nameCtrl.dispose();
     _qtyCtrl.dispose();
     _rateCtrl.dispose();
@@ -1391,16 +1422,19 @@ class _OrderItemRowState extends State<_OrderItemRow> {
   }
 
   void _notify() {
+    final parsedQty = PortionHelper.parseQtyInput(_qtyCtrl.text, allowFHQ: _isPortion);
     widget.onChanged(OrderItem(
       name: _nameCtrl.text,
-      qty: double.tryParse(_qtyCtrl.text) ?? 1,
+      qty: (parsedQty != null && parsedQty > 0) ? parsedQty : widget.item.qty,
       rate: double.tryParse(_rateCtrl.text) ?? 0,
     ));
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = (double.tryParse(_qtyCtrl.text) ?? 0) * (double.tryParse(_rateCtrl.text) ?? 0);
+    final isPortion = _isPortion;
+    final parsedQty = PortionHelper.parseQtyInput(_qtyCtrl.text, allowFHQ: isPortion) ?? widget.item.qty;
+    final total = parsedQty * (double.tryParse(_rateCtrl.text) ?? 0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1414,11 +1448,19 @@ class _OrderItemRowState extends State<_OrderItemRow> {
             width: 70,
             child: TextField(
               controller: _qtyCtrl,
+              focusNode: _qtyFocus,
               onChanged: (_) { _notify(); setState(() {}); },
-              decoration: _inputDec('1'),
-              style: const TextStyle(fontSize: 13),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+              decoration: _inputDec(isPortion ? 'Q/H/F' : '1'),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              keyboardType: isPortion
+                  ? TextInputType.text
+                  : const TextInputType.numberWithOptions(decimal: true),
+              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(
+                  isPortion ? RegExp(r'[0-9fFhHqQ+\s]') : RegExp(r'^\d*\.?\d*'),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 8),

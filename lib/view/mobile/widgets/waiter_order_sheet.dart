@@ -3,9 +3,11 @@ import 'package:get/get.dart';
 import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/controller/table_controller.dart';
 import 'package:test_bill/core/constants/colors.dart';
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/table_model.dart';
 import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/view/widgets/bill_receipt_preview.dart';
+import 'package:test_bill/view/widgets/inline_qty_control.dart';
 
 class WaiterOrderSheet extends StatefulWidget {
   final DiningTable table;
@@ -51,6 +53,16 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
         _items.removeAt(index);
       } else {
         _items[index].qty = updated;
+      }
+    });
+  }
+
+  void _setQuantity(int index, double newQty) {
+    setState(() {
+      if (newQty <= 0) {
+        _items.removeAt(index);
+      } else {
+        _items[index].qty = newQty;
       }
     });
   }
@@ -385,39 +397,15 @@ class _WaiterOrderSheetState extends State<WaiterOrderSheet> {
                                   ),
                                 ),
 
-                                // Quantity Selector
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      IconButton(
-                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                        padding: EdgeInsets.zero,
-                                        icon: const Icon(Icons.remove_rounded, size: 16, color: AppColors.kRed),
-                                        onPressed: () => _updateQuantity(i, -1),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        child: Text(
-                                          '${item.qty.toInt()}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                        padding: EdgeInsets.zero,
-                                        icon: const Icon(Icons.add_rounded, size: 16, color: AppColors.kGreen),
-                                        onPressed: () => _updateQuantity(i, 1),
-                                      ),
-                                    ],
-                                  ),
+                                // Quantity Selector (typable, supports F/H/Q for Mandi)
+                                InlineQtyControl(
+                                  qty: item.qty,
+                                  isPortion: PortionHelper.isPortionItemByName(item.name),
+                                  accentColor: AppColors.kBlue,
+                                  inputWidth: PortionHelper.isPortionItemByName(item.name) ? 48 : 38,
+                                  onDecrease: () => _updateQuantity(i, -1),
+                                  onIncrease: () => _updateQuantity(i, 1),
+                                  onSetQty: (q) => _setQuantity(i, q),
                                 ),
                                 const SizedBox(width: 12),
 

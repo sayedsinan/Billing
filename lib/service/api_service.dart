@@ -187,6 +187,51 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
+  /// Verifies the currently logged-in user's login password before sensitive
+  /// edit or delete operations. Falls back to `/auth/login` (without altering
+  /// the stored session token) if `/auth/verify-password` is not yet deployed.
+  Future<bool> verifyPassword(
+    String password, {
+    String? fallbackEmail,
+  }) async {
+    try {
+      await _request(
+        () => _dio.post('/auth/verify-password', data: {'password': password}),
+        fullResponse: true,
+      );
+      return true;
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        String? email = fallbackEmail?.trim();
+        if (email == null || email.isEmpty) {
+          try {
+            final profile = await getProfile();
+            email = profile['email']?.toString().trim();
+          } catch (_) {}
+        }
+        if (email == null || email.isEmpty) {
+          throw ApiException('Unable to identify logged-in account for password check.');
+        }
+        try {
+          await _request(
+            () => _dio.post(
+              '/auth/login',
+              data: {'email': email, 'password': password},
+            ),
+            fullResponse: true,
+          );
+          return true;
+        } on ApiException catch (loginErr) {
+          if (loginErr.statusCode == 401 || loginErr.statusCode == 400) {
+            throw ApiException('Incorrect password', statusCode: 401);
+          }
+          rethrow;
+        }
+      }
+      rethrow;
+    }
+  }
+
   // ── Products ─────────────────────────────────────────────────────────
   Future<List<dynamic>> getProducts({String? search, String? category}) async {
     final data = await _request(

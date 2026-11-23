@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/models/table_model.dart';
+import 'package:test_bill/service/print_service.dart';
 import 'package:test_bill/theme/colors.dart';
 
 /// A widget that renders a live visual representation of an ESC/POS thermal receipt.
@@ -21,7 +23,7 @@ class BillReceiptPreview extends StatelessWidget {
 
   const BillReceiptPreview({
     super.key,
-    this.shopName = 'G R I L L O',
+    this.shopName = 'Billing Receipt',
     this.tableId,
     this.waiter,
     this.customerName,
@@ -36,9 +38,9 @@ class BillReceiptPreview extends StatelessWidget {
     this.isKOT = false,
   });
 
-  factory BillReceiptPreview.fromBill(Bill bill, {bool isKOT = false}) {
+  factory BillReceiptPreview.fromBill(Bill bill, {bool isKOT = false, String? shopName}) {
     return BillReceiptPreview(
-      shopName: 'G R I L L O',
+      shopName: shopName ?? PrintService.instance.shopName,
       tableId: bill.tableId,
       waiter: bill.waiter,
       customerName: bill.customerName,
@@ -279,7 +281,7 @@ class BillReceiptPreview extends StatelessWidget {
                   ? item.total
                   : (item is BillItem ? item.total : (item['total'] as num?)?.toDouble() ?? (qty * rate));
 
-              final qtyLabel = qty == qty.toInt() ? '${qty.toInt()}' : '$qty';
+              final qtyLabel = PortionHelper.formatQtyForItem(name, qty);
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),

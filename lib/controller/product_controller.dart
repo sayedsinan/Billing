@@ -107,9 +107,12 @@ class ProductController extends GetxController {
       final data = await _api.updateProduct(p.id, payload);
       final updated = Product.fromJson(data);
       final idx = products.indexWhere((x) => x.id == updated.id);
-      if (idx >= 0) products[idx] = updated;
-      if (!categories.contains(updated.category))
-        categories.add(updated.category);
+      if (idx >= 0) {
+        products[idx] = updated;
+      } else {
+        products.add(updated);
+      }
+      await fetchCategories();
       return true;
     } on ApiException catch (e) {
       Get.snackbar('Error', e.message, snackPosition: SnackPosition.BOTTOM);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
 
 // ─── Shared Colors ────────────────────────────────────────────────────────────
 const kBlue = Color(0xFF2196F3);
@@ -131,6 +132,15 @@ class _StockPageState extends State<StockPage> with SingleTickerProviderStateMix
   }
 
   void _openEditor({StockItem? existing}) async {
+    if (existing != null) {
+      final verified = await PasswordConfirmDialog.verify(
+        context,
+        title: 'Edit Stock Item',
+        message: 'Enter your login password to edit "${existing.name}".',
+        confirmLabel: 'Unlock & Edit',
+      );
+      if (!verified || !mounted) return;
+    }
     final result = await showDialog<StockItem>(
       context: context,
       barrierDismissible: false,
@@ -164,23 +174,16 @@ class _StockPageState extends State<StockPage> with SingleTickerProviderStateMix
     }
   }
 
-  void _delete(StockItem item) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Item?', style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text('Remove "${item.name}" from stock permanently?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () { setState(() => _stock.removeWhere((s) => s.id == item.id)); Navigator.pop(context); },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  Future<void> _delete(StockItem item) async {
+    final verified = await PasswordConfirmDialog.verify(
+      context,
+      title: 'Delete Stock Item',
+      message: 'Enter your login password to permanently remove "${item.name}" from stock.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
+    if (!verified || !mounted) return;
+    setState(() => _stock.removeWhere((s) => s.id == item.id));
   }
 
   @override

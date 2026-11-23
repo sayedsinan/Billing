@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:test_bill/controller/employee_controller.dart';
 import 'package:test_bill/models/employee_model.dart';
 import 'package:test_bill/theme/colors.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
@@ -28,7 +29,14 @@ class _AttendancePageState extends State<AttendancePage> {
     _showEmployeeFormDialog(context, null);
   }
 
-  void _openEditEmployeeDialog(BuildContext context, EmployeeModel emp) {
+  Future<void> _openEditEmployeeDialog(BuildContext context, EmployeeModel emp) async {
+    final verified = await PasswordConfirmDialog.verify(
+      context,
+      title: 'Edit Employee',
+      message: 'Enter your login password to edit "${emp.name}".',
+      confirmLabel: 'Unlock & Edit',
+    );
+    if (!verified || !mounted) return;
     _showEmployeeFormDialog(context, emp);
   }
 
@@ -175,31 +183,21 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  void _confirmDeleteEmployee(BuildContext context, EmployeeModel emp) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Employee?'),
-        content: Text('Are you sure you want to remove "${emp.name}" (${emp.role})?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _controller.deleteEmployee(emp);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${emp.name} deleted'), backgroundColor: kRed),
-                );
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  Future<void> _confirmDeleteEmployee(BuildContext context, EmployeeModel emp) async {
+    final verified = await PasswordConfirmDialog.verify(
+      context,
+      title: 'Delete Employee',
+      message: 'Enter your login password to permanently remove "${emp.name}" (${emp.role}).',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await _controller.deleteEmployee(emp);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${emp.name} deleted'), backgroundColor: kRed),
+      );
+    }
   }
 
   void _openEmployeeProfileDialog(BuildContext context, EmployeeModel emp) {

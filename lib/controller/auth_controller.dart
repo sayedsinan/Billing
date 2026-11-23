@@ -39,9 +39,25 @@ class AuthController extends GetxController {
     super.onClose();
   }
 
+  void _syncTenantSettings(dynamic tenant) {
+    if (tenant is Map) {
+      final t = Map<String, dynamic>.from(tenant);
+      if (t['name'] != null && t['name'].toString().isNotEmpty) {
+        _box.write('shop_name', t['name'].toString());
+      }
+      if (t['phone'] != null) _box.write('shop_phone', t['phone'].toString());
+      if (t['address'] != null) _box.write('shop_address', t['address'].toString());
+      if (t['receiptFooter'] != null) _box.write('footer_note', t['receiptFooter'].toString());
+      if (t['gstin'] != null) _box.write('shop_gstin', t['gstin'].toString());
+      if (t['currency'] != null) _box.write('currency_symbol', t['currency'].toString());
+    }
+  }
+
   Future<void> _loadProfile() async {
     try {
-      currentUser.value = await _api.getProfile();
+      final profile = await _api.getProfile();
+      currentUser.value = profile;
+      _syncTenantSettings(profile['tenant']);
     } on ApiException {
       // Token is stale/invalid — drop it so the login screen shows again.
       _api.clearToken();
@@ -72,6 +88,8 @@ class AuthController extends GetxController {
       currentUser.value = (data['user'] is Map)
           ? Map<String, dynamic>.from(data['user'])
           : data;
+
+      _syncTenantSettings(data['tenant']);
 
       passwordController.clear();
       return true;

@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:windows_printer/windows_printer.dart';
 
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/models/table_model.dart';
 
@@ -155,10 +156,16 @@ class PrintService {
 
     builder.line('ITEMS', style: centerBold);
     for (final item in bill.items) {
-      final qtyLabel = item.qty == item.qty.roundToDouble()
-          ? item.qty.toInt().toString()
-          : item.qty.toString();
-      builder.item('${item.name} x$qtyLabel', _money(item.total));
+      final isPortion = PortionHelper.isPortionItemByName(item.name);
+      final qtyLabel = PortionHelper.formatQtyForItem(
+        item.name,
+        item.qty,
+        forcePortion: isPortion,
+      );
+      final label = isPortion
+          ? '${item.name} ($qtyLabel)'
+          : '${item.name} x$qtyLabel';
+      builder.item(label, _money(item.total));
     }
 
     builder.separator();
@@ -338,6 +345,157 @@ class PrintService {
     }
   }
 
+  /// Manual thermal print for Sales Summary Report (total sales, revenue,
+  /// payment breakdown, most sold item, and top/all sold items) for any date range.
+  Future<void> printSalesSummaryReport({
+    required String periodLabel,
+    required String dateRangeLabel,
+    required int totalOrders,
+    required int paidOrders,
+    required int pendingOrders,
+    required int cancelledOrders,
+    required double totalRevenue,
+    required double totalDiscount,
+    required double totalItemsSold,
+    required Map<String, double> paymentBreakdown,
+    required List<Map<String, dynamic>> itemSales,
+    bool includeAllItems = false,
+    String? printerName,
+  }) async {
+    if (!GetPlatform.isWindows) {
+      throw PrintException(
+        'Direct thermal printing is only supported on Windows.',
+      );
+    }
+    final target = printerName ?? await resolvePrinter();
+    if (target == null || target.isEmpty) {
+      throw PrintException(
+        'No printer found. Make sure your thermal printer is connected and selected in Settings.',
+      );
+    }
+
+    const centerBold = WPTextStyle(align: WPTextAlign.center, bold: true);
+    const center = WPTextStyle(align: WPTextAlign.center);
+    const totalStyle = WPTextStyle(
+      bold: true,
+      align: WPTextAlign.center,
+      size: WPTextSize.doubleHeight,
+    );
+
+    String fmtQty(num q) =>
+        q == q.roundToDouble() ? q.toInt().toString() : q.toStringAsFixed(1);
+
+    String trimName(String name, {int max = 22}) =>
+        name.length <= max ? name : '${name.substring(0, max - 1)}.';
+
+    final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
+
+    builder.header(shopName);
+    if (shopAddress.isNotEmpty) {
+      builder.line(shopAddress, style: center);
+    }
+    if (shopPhone.isNotEmpty) {
+      builder.line('Ph: $shopPhone', style: center);
+    }
+    builder.separator();
+
+    builder.line('SALES SUMMARY REPORT', style: centerBold);
+    builder.line(periodLabel, style: centerBold);
+    builder.line(dateRangeLabel, style: center);
+    builder.line('Printed: ${_formatDate(DateTime.now())}', style: center);
+    builder.separator();
+
+    builder.item('Total Sales (Orders)', '$totalOrders');
+    builder.item('Paid / Pending', '$paidOrders / $pendingOrders');
+    if (cancelledOrders > 0) {
+      builder.item('Cancelled Orders', '$cancelledOrders');
+    }
+    builder.item('Total Items Sold', fmtQty(totalItemsSold));
+    final avgBill = totalOrders > 0 ? totalRevenue / totalOrders : 0.0;
+    builder.item('Avg Bill Value', 'Rs.${_money(avgBill)}');
+    if (totalDiscount > 0) {
+      builder.item('Total Discount', 'Rs.${_money(totalDiscount)}');
+    }
+
+    builder.separator();
+    builder.line('TOTAL SALES: Rs.${_money(totalRevenue)}', style: totalStyle);
+    builder.separator();
+
+    if (paymentBreakdown.isNotEmpty) {
+      builder.line('PAYMENT BREAKDOWN', style: centerBold);
+      paymentBreakdown.forEach((method, amount) {
+        if (amount > 0) {
+          final label = method.isEmpty
+              ? 'Other'
+              : '${method[0].toUpperCase()}${method.substring(1)}';
+          builder.item(label, 'Rs.${_money(amount)}');
+        }
+      });
+      builder.separator();
+    }
+
+    if (itemSales.isNotEmpty) {
+      final top = itemSales.first;
+      final topName = top['name']?.toString() ?? '-';
+      final topQty = fmtQty((top['qty'] as num?) ?? 0);
+      final topTotal = _money(((top['total'] as num?) ?? 0).toDouble());
+
+      builder.line('MOST SOLD ITEM', style: centerBold);
+      builder.line(topName, style: centerBold);
+      builder.line('$topQty sold  (Rs.$topTotal)', style: center);
+      builder.separator();
+
+      final itemsToPrint = includeAllItems
+          ? itemSales
+          : itemSales.take(10).toList();
+      builder.line(
+        includeAllItems
+            ? 'ALL ITEMS SOLD (${itemsToPrint.length})'
+            : 'TOP ${itemsToPrint.length} SELLING ITEMS',
+        style: centerBold,
+      );
+
+      for (int i = 0; i < itemsToPrint.length; i++) {
+        final item = itemsToPrint[i];
+        final name = trimName(item['name']?.toString() ?? 'Item');
+        final qty = fmtQty((item['qty'] as num?) ?? 0);
+        final rev = _money(((item['total'] as num?) ?? 0).toDouble());
+        builder.item('${i + 1}. $name x$qty', 'Rs.$rev');
+      }
+      builder.separator();
+    } else {
+      builder.line('No item sales in this period', style: center);
+      builder.separator();
+    }
+
+    builder.line('--- END OF REPORT ---', style: centerBold);
+    _cutPaper(builder);
+
+    final bytes = Uint8List.fromList(builder.build());
+    try {
+      await WindowsPrinter.printRawData(
+        printerName: target,
+        data: bytes,
+        useRawDatatype: true,
+      );
+    } catch (e) {
+      if (printerName == null) {
+        final freshTarget = await resolvePrinter(forceRefresh: true);
+        if (freshTarget != null && freshTarget != target) {
+          try {
+            await WindowsPrinter.printRawData(
+              printerName: freshTarget,
+              data: bytes,
+              useRawDatatype: true,
+            );
+            return;
+          } catch (_) {}
+        }
+      }
+      throw PrintException('Could not print sales summary report: $e');
+    }
+  }
+
   Uint8List _buildKitchenReceiptBytes(Bill bill) {
     const center = WPTextStyle(align: WPTextAlign.center);
     const centerBold = WPTextStyle(align: WPTextAlign.center, bold: true);
@@ -363,10 +521,16 @@ class PrintService {
     builder.line('ITEMS', style: centerBold);
 
     for (final item in bill.items) {
-      final qtyLabel = item.qty == item.qty.roundToDouble()
-          ? item.qty.toInt().toString()
-          : item.qty.toString();
-      builder.line('$qtyLabel x ${item.name}', style: itemStyle);
+      final isPortion = PortionHelper.isPortionItemByName(item.name);
+      final qtyLabel = PortionHelper.formatQtyForItem(
+        item.name,
+        item.qty,
+        forcePortion: isPortion,
+      );
+      final kotLine = isPortion
+          ? '$qtyLabel  ${item.name}'
+          : '$qtyLabel x ${item.name}';
+      builder.line(kotLine, style: itemStyle);
     }
 
     builder.separator();

@@ -4,6 +4,7 @@ import 'package:test_bill/controller/auth_controller.dart';
 import 'package:test_bill/controller/product_controller.dart';
 import 'package:test_bill/controller/table_controller.dart';
 import 'package:test_bill/core/constants/colors.dart';
+import 'package:test_bill/core/utils/portion_helper.dart';
 import 'package:test_bill/models/product_model.dart';
 import 'package:test_bill/models/table_model.dart';
 import 'package:test_bill/view/login/login_screen.dart';
@@ -694,7 +695,7 @@ class _WaiterMobilePageState extends State<WaiterMobilePage> with SingleTickerPr
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '$currentQty in cart',
+                            '${PortionHelper.formatQtyForItem(p.name, currentQty.toDouble(), forcePortion: PortionHelper.isPortionProduct(p))} in cart',
                             style: const TextStyle(
                               color: AppColors.kGreen,
                               fontWeight: FontWeight.bold,

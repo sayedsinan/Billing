@@ -6,6 +6,7 @@ import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/models/transaction_model.dart';
 import 'package:test_bill/theme/colors.dart';
 import 'package:test_bill/view/reports/reports_page.dart';
+import 'package:test_bill/view/widgets/password_confirm_dialog.dart';
 
 class TransactionsPage extends StatefulWidget {
   const TransactionsPage({super.key});
@@ -216,26 +217,16 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
-  void _deleteCustomTransaction(CustomTransaction tx) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Entry?'),
-        content: Text('Are you sure you want to delete "${tx.title}" (₹${tx.amount.toStringAsFixed(0)})?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kRed, foregroundColor: kWhite, elevation: 0),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _transactionController.deleteTransaction(tx);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  Future<void> _deleteCustomTransaction(CustomTransaction tx) async {
+    final verified = await PasswordConfirmDialog.verify(
+      context,
+      title: 'Delete Entry',
+      message: 'Enter your login password to permanently delete "${tx.title}" (₹${tx.amount.toStringAsFixed(0)}).',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
+    if (!verified) return;
+    await _transactionController.deleteTransaction(tx);
   }
 
   void _showPaymentDialog(BuildContext ctx, Bill bill) {
