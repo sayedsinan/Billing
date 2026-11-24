@@ -23,7 +23,7 @@ class BillReceiptPreview extends StatelessWidget {
 
   const BillReceiptPreview({
     super.key,
-    this.shopName = 'Billing Receipt',
+    this.shopName = '',
     this.tableId,
     this.waiter,
     this.customerName,
@@ -71,6 +71,11 @@ class BillReceiptPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateStr = _formatDate(createdAt ?? DateTime.now());
     final bNum = billNumber ?? (tableId != null ? 'TBL-$tableId' : '001');
+    final displayShopName = shopName.trim().isNotEmpty
+        ? shopName.trim()
+        : (PrintService.instance.shopName.isNotEmpty
+            ? PrintService.instance.shopName
+            : 'Sales Receipt');
 
     return Container(
       width: 320,
@@ -114,7 +119,7 @@ class BillReceiptPreview extends StatelessWidget {
 
           // ── Shop Name ──
           Text(
-            isKOT ? 'KITCHEN ORDER' : shopName,
+            isKOT ? 'KITCHEN ORDER' : displayShopName,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontFamily: 'monospace',
@@ -124,12 +129,12 @@ class BillReceiptPreview extends StatelessWidget {
               letterSpacing: 1.5,
             ),
           ),
-          if (!isKOT) ...[
+          if (!isKOT && PrintService.instance.shopAddress.isNotEmpty) ...[
             const SizedBox(height: 2),
-            const Text(
-              'Restaurant & Fine Dining',
+            Text(
+              PrintService.instance.shopAddress,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 11,
                 color: Colors.black54,

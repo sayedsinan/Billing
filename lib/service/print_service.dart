@@ -29,10 +29,10 @@ class PrintService {
   final GetStorage _box = GetStorage();
   static const _printerKey = 'selected_printer';
 
-  // ── Shop details shown on every receipt — adjust to taste ─────────────
-  String get shopName => _box.read<String>('shop_name') ?? 'Grillo';
-  String get shopAddress => _box.read<String>('shop_address') ?? '';
-  String get shopPhone => _box.read<String>('shop_phone') ?? '';
+  // ── Shop details shown on every receipt — configured in Settings ───────
+  String get shopName => (_box.read<String>('shop_name') ?? '').trim();
+  String get shopAddress => (_box.read<String>('shop_address') ?? '').trim();
+  String get shopPhone => (_box.read<String>('shop_phone') ?? '').trim();
   String get footerLine => _box.read<String>('footer_note') ?? 'Thank you, visit again!';
 
   // ── Rounds a price for display — 29.99 -> 30 ──
@@ -131,12 +131,15 @@ class PrintService {
 
     final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
 
-    builder.header(shopName);
+    if (shopName.isNotEmpty) {
+      builder.header(shopName);
+    }
     if (shopAddress.isNotEmpty) {
       builder.line(shopAddress, style: center);
     }
-    final phone = shopPhone.isNotEmpty ? shopPhone : '';
-    builder.line('Ph: $phone', style: center);
+    if (shopPhone.isNotEmpty) {
+      builder.line('Ph: $shopPhone', style: center);
+    }
     builder.separator();
 
     builder.line('Bill #${bill.billNumber}', style: centerBold);
@@ -301,7 +304,9 @@ class PrintService {
 
     final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
 
-    builder.header(shopName);
+    if (shopName.isNotEmpty) {
+      builder.header(shopName);
+    }
     builder.line('SHIFT CLOSE & CASH Z-REPORT', style: centerBold);
     builder.line('Time: $shiftLabel', style: center);
     builder.separator();
@@ -390,7 +395,9 @@ class PrintService {
 
     final builder = WPReceiptBuilder(wpPaperSize: WPPaperSize.mm80);
 
-    builder.header(shopName);
+    if (shopName.isNotEmpty) {
+      builder.header(shopName);
+    }
     if (shopAddress.isNotEmpty) {
       builder.line(shopAddress, style: center);
     }

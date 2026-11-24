@@ -187,19 +187,68 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
-  /// Verifies the currently logged-in user's login password before sensitive
-  /// edit or delete operations. Falls back to `/auth/login` (without altering
-  /// the stored session token) if `/auth/verify-password` is not yet deployed.
-  Future<bool> verifyPassword(
-    String password, {
+  Future<Map<String, dynamic>> updateTenantProfile({
+    required String name,
+    String? phone,
+    String? address,
+    String? receiptFooter,
+  }) async {
+    final data = await _request(
+      () => _dio.put(
+        '/auth/tenant',
+        data: {
+          'name': name,
+          if (phone != null) 'phone': phone,
+          if (address != null) 'address': address,
+          if (receiptFooter != null) 'receiptFooter': receiptFooter,
+        },
+      ),
+    );
+    return Map<String, dynamic>.from(data);
+  }
+
+  static const _actionPasswordKey = 'separate_action_password_v1';
+
+  /// Checks whether the separate Edit & Delete password has been configured.
+  Future<bool> hasActionPassword() async {
+    try {
+      final data = await _request(() => _dio.get('/auth/action-password/status'));
+      if (data is Map && data['isSet'] is bool) {
+        return data['isSet'] as bool;
+      }
+      return false;
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        final local = _box.read<String>(_actionPasswordKey);
+        return local != null && local.isNotEmpty;
+      }
+      rethrow;
+    }
+  }
+
+  /// Sets or updates the separate Edit & Delete password (never the login password).
+  /// Requires the user's [loginPassword] to authorize the change.
+  Future<void> setActionPassword({
+    required String loginPassword,
+    required String newPassword,
     String? fallbackEmail,
   }) async {
+    if (newPassword.trim().length < 4) {
+      throw ApiException('Edit & Delete password must be at least 4 characters');
+    }
     try {
       await _request(
-        () => _dio.post('/auth/verify-password', data: {'password': password}),
+        () => _dio.put(
+          '/auth/action-password',
+          data: {
+            'loginPassword': loginPassword,
+            'newPassword': newPassword,
+          },
+        ),
         fullResponse: true,
       );
-      return true;
+      // Clear stale local fallback when server persists it cleanly
+      _box.remove(_actionPasswordKey);
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
         String? email = fallbackEmail?.trim();
@@ -210,23 +259,51 @@ class ApiService {
           } catch (_) {}
         }
         if (email == null || email.isEmpty) {
-          throw ApiException('Unable to identify logged-in account for password check.');
+          throw ApiException('Unable to identify logged-in account to authorize password change.');
         }
         try {
           await _request(
             () => _dio.post(
               '/auth/login',
-              data: {'email': email, 'password': password},
+              data: {'email': email, 'password': loginPassword},
             ),
             fullResponse: true,
           );
-          return true;
         } on ApiException catch (loginErr) {
           if (loginErr.statusCode == 401 || loginErr.statusCode == 400) {
-            throw ApiException('Incorrect password', statusCode: 401);
+            throw ApiException('Invalid account login password.', statusCode: 401);
           }
           rethrow;
         }
+        await _box.write(_actionPasswordKey, newPassword);
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  /// Verifies the separate Edit & Delete password (NOT the login password).
+  /// Throws ApiException(statusCode: 412) if no separate password has been set yet.
+  Future<bool> verifyActionPassword(String password) async {
+    try {
+      await _request(
+        () => _dio.post('/auth/verify-password', data: {'password': password}),
+        fullResponse: true,
+      );
+      return true;
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        final local = _box.read<String>(_actionPasswordKey);
+        if (local == null || local.isEmpty) {
+          throw ApiException(
+            'Edit & Delete password is not set yet. Please set one first.',
+            statusCode: 412,
+          );
+        }
+        if (password != local) {
+          throw ApiException('Incorrect Edit & Delete password', statusCode: 401);
+        }
+        return true;
       }
       rethrow;
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:test_bill/models/bill_model.dart';
 import 'package:test_bill/service/api_service.dart';
 import 'package:test_bill/service/print_service.dart';
+import 'package:test_bill/service/sales_report_export_service.dart';
 import 'package:test_bill/theme/colors.dart';
 
 enum SalesReportPreset { today, yesterday, thisMonth, custom }
@@ -44,6 +45,8 @@ class _SalesReportPrintDialogState extends State<SalesReportPrintDialog> {
 
   bool _loading = true;
   bool _printing = false;
+  bool _exportingPdf = false;
+  bool _exportingExcel = false;
   bool _includeAllItems = false;
   String? _error;
   List<Bill> _bills = [];
@@ -300,6 +303,89 @@ class _SalesReportPrintDialogState extends State<SalesReportPrintDialog> {
       }
     } finally {
       if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  Future<void> _downloadPdf(_SalesSummaryData summary) async {
+    setState(() => _exportingPdf = true);
+    try {
+      final bytes = SalesReportExportService.buildPdfBytes(
+        shopName: PrintService.instance.shopName,
+        periodLabel: _periodLabel,
+        dateRangeLabel: _dateRangeLabel,
+        totalOrders: summary.totalOrders,
+        paidOrders: summary.paidOrders,
+        pendingOrders: summary.pendingOrders,
+        cancelledOrders: summary.cancelledOrders,
+        totalRevenue: summary.totalRevenue,
+        totalDiscount: summary.totalDiscount,
+        totalItemsSold: summary.totalItemsSold,
+        paymentBreakdown: summary.paymentBreakdown,
+        itemSales: summary.itemSales,
+      );
+      final savedPath = await SalesReportExportService.saveReportFile(
+        bytes: bytes,
+        dateRangeLabel: _dateRangeLabel,
+        extension: 'pdf',
+      );
+      if (savedPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF saved: $savedPath'),
+            backgroundColor: kGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF download failed: $e'), backgroundColor: kRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
+  }
+
+  Future<void> _downloadExcel(_SalesSummaryData summary) async {
+    setState(() => _exportingExcel = true);
+    try {
+      final bytes = SalesReportExportService.buildExcelBytes(
+        shopName: PrintService.instance.shopName,
+        periodLabel: _periodLabel,
+        dateRangeLabel: _dateRangeLabel,
+        totalOrders: summary.totalOrders,
+        paidOrders: summary.paidOrders,
+        pendingOrders: summary.pendingOrders,
+        cancelledOrders: summary.cancelledOrders,
+        totalRevenue: summary.totalRevenue,
+        totalDiscount: summary.totalDiscount,
+        totalItemsSold: summary.totalItemsSold,
+        paymentBreakdown: summary.paymentBreakdown,
+        itemSales: summary.itemSales,
+        bills: _bills,
+      );
+      final savedPath = await SalesReportExportService.saveReportFile(
+        bytes: bytes,
+        dateRangeLabel: _dateRangeLabel,
+        extension: 'xls',
+      );
+      if (savedPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Excel saved: $savedPath'),
+            backgroundColor: kGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Excel download failed: $e'), backgroundColor: kRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingExcel = false);
     }
   }
 
@@ -754,8 +840,10 @@ class _SalesReportPrintDialogState extends State<SalesReportPrintDialog> {
             // Footer Buttons
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   OutlinedButton(
                     style: OutlinedButton.styleFrom(
@@ -763,14 +851,73 @@ class _SalesReportPrintDialogState extends State<SalesReportPrintDialog> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
+                        horizontal: 14,
                         vertical: 12,
                       ),
                     ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Close'),
                   ),
-                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kRed,
+                      side: const BorderSide(color: kRed),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                    ),
+                    onPressed: (_loading || _exportingPdf || _error != null)
+                        ? null
+                        : () => _downloadPdf(summary),
+                    icon: _exportingPdf
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: kRed,
+                            ),
+                          )
+                        : const Icon(Icons.picture_as_pdf_rounded, size: 17),
+                    label: Text(
+                      _exportingPdf ? 'Saving...' : 'Download PDF',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kGreen,
+                      side: const BorderSide(color: kGreen),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                    ),
+                    onPressed: (_loading || _exportingExcel || _error != null)
+                        ? null
+                        : () => _downloadExcel(summary),
+                    icon: _exportingExcel
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: kGreen,
+                            ),
+                          )
+                        : const Icon(Icons.table_chart_rounded, size: 17),
+                    label: Text(
+                      _exportingExcel ? 'Saving...' : 'Download Excel',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kBlue,
@@ -780,7 +927,7 @@ class _SalesReportPrintDialogState extends State<SalesReportPrintDialog> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
+                        horizontal: 18,
                         vertical: 12,
                       ),
                     ),
