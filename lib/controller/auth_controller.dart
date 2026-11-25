@@ -39,15 +39,71 @@ class AuthController extends GetxController {
     super.onClose();
   }
 
+  static bool isLegacySeededName(String? value) {
+    final v = (value ?? '').trim().toLowerCase();
+    return v == 'grillo cafe & restaurant' ||
+        v == 'grillo billing' ||
+        v == 'grillo';
+  }
+
+  static bool isLegacySeededPhone(String? value) {
+    final v = (value ?? '').trim().toLowerCase();
+    return v == '+91 98765 43210';
+  }
+
+  static bool isLegacySeededAddress(String? value) {
+    final v = (value ?? '').trim().toLowerCase();
+    return v == 'main street, city centre' || v == 'main street, city';
+  }
+
   void _syncTenantSettings(dynamic tenant) {
+    final customized = _box.read<bool>('store_profile_customized') == true;
+
+    // Clear any previously cached legacy Grillo defaults if not explicitly customized
+    if (!customized) {
+      if (isLegacySeededName(_box.read<String>('shop_name'))) {
+        _box.write('shop_name', '');
+      }
+      if (isLegacySeededPhone(_box.read<String>('shop_phone'))) {
+        _box.write('shop_phone', '');
+      }
+      if (isLegacySeededAddress(_box.read<String>('shop_address'))) {
+        _box.write('shop_address', '');
+      }
+    }
+
     if (tenant is Map) {
       final t = Map<String, dynamic>.from(tenant);
-      if (t['name'] != null && t['name'].toString().isNotEmpty) {
-        _box.write('shop_name', t['name'].toString());
+      final serverName = t['name']?.toString().trim() ?? '';
+      final serverPhone = t['phone']?.toString().trim() ?? '';
+      final serverAddress = t['address']?.toString().trim() ?? '';
+
+      if (customized) {
+        // Keep the user's locally saved profile if server still holds legacy seeded defaults
+        if (serverName.isNotEmpty && !isLegacySeededName(serverName)) {
+          _box.write('shop_name', serverName);
+        }
+        if (serverPhone.isNotEmpty && !isLegacySeededPhone(serverPhone)) {
+          _box.write('shop_phone', serverPhone);
+        }
+        if (serverAddress.isNotEmpty && !isLegacySeededAddress(serverAddress)) {
+          _box.write('shop_address', serverAddress);
+        }
+      } else {
+        if (serverName.isNotEmpty && !isLegacySeededName(serverName)) {
+          _box.write('shop_name', serverName);
+        }
+        if (serverPhone.isNotEmpty && !isLegacySeededPhone(serverPhone)) {
+          _box.write('shop_phone', serverPhone);
+        }
+        if (serverAddress.isNotEmpty && !isLegacySeededAddress(serverAddress)) {
+          _box.write('shop_address', serverAddress);
+        }
       }
-      if (t['phone'] != null) _box.write('shop_phone', t['phone'].toString());
-      if (t['address'] != null) _box.write('shop_address', t['address'].toString());
-      if (t['receiptFooter'] != null) _box.write('footer_note', t['receiptFooter'].toString());
+
+      if (!customized && t['receiptFooter'] != null) {
+        _box.write('footer_note', t['receiptFooter'].toString());
+      }
       if (t['gstin'] != null) _box.write('shop_gstin', t['gstin'].toString());
       if (t['currency'] != null) _box.write('currency_symbol', t['currency'].toString());
     }

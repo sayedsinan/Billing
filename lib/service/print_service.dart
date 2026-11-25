@@ -30,9 +30,38 @@ class PrintService {
   static const _printerKey = 'selected_printer';
 
   // ── Shop details shown on every receipt — configured in Settings ───────
-  String get shopName => (_box.read<String>('shop_name') ?? '').trim();
-  String get shopAddress => (_box.read<String>('shop_address') ?? '').trim();
-  String get shopPhone => (_box.read<String>('shop_phone') ?? '').trim();
+  String get shopName {
+    final v = (_box.read<String>('shop_name') ?? '').trim();
+    final customized = _box.read<bool>('store_profile_customized') == true;
+    if (!customized &&
+        (v.toLowerCase() == 'grillo cafe & restaurant' ||
+            v.toLowerCase() == 'grillo billing' ||
+            v.toLowerCase() == 'grillo')) {
+      return '';
+    }
+    return v;
+  }
+
+  String get shopAddress {
+    final v = (_box.read<String>('shop_address') ?? '').trim();
+    final customized = _box.read<bool>('store_profile_customized') == true;
+    if (!customized &&
+        (v.toLowerCase() == 'main street, city centre' ||
+            v.toLowerCase() == 'main street, city')) {
+      return '';
+    }
+    return v;
+  }
+
+  String get shopPhone {
+    final v = (_box.read<String>('shop_phone') ?? '').trim();
+    final customized = _box.read<bool>('store_profile_customized') == true;
+    if (!customized && v == '+91 98765 43210') {
+      return '';
+    }
+    return v;
+  }
+
   String get footerLine => _box.read<String>('footer_note') ?? 'Thank you, visit again!';
 
   // ── Rounds a price for display — 29.99 -> 30 ──

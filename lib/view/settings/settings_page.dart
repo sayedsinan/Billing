@@ -38,10 +38,29 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _shopNameCtrl.text = _box.read<String>('shop_name') ?? '';
-    _shopPhoneCtrl.text = _box.read<String>('shop_phone') ?? '';
-    _shopAddressCtrl.text = _box.read<String>('shop_address') ?? '';
+    final customized = _box.read<bool>('store_profile_customized') == true;
+    final storedName = _box.read<String>('shop_name') ?? '';
+    final storedPhone = _box.read<String>('shop_phone') ?? '';
+    final storedAddress = _box.read<String>('shop_address') ?? '';
+
+    _shopNameCtrl.text = (!customized && AuthController.isLegacySeededName(storedName))
+        ? ''
+        : storedName;
+    _shopPhoneCtrl.text = (!customized && AuthController.isLegacySeededPhone(storedPhone))
+        ? ''
+        : storedPhone;
+    _shopAddressCtrl.text = (!customized && AuthController.isLegacySeededAddress(storedAddress))
+        ? ''
+        : storedAddress;
     _footerNoteCtrl.text = _box.read<String>('footer_note') ?? 'Thank you, visit again!';
+
+    // Clean out stale legacy defaults from local storage immediately
+    if (!customized) {
+      if (AuthController.isLegacySeededName(storedName)) _box.write('shop_name', '');
+      if (AuthController.isLegacySeededPhone(storedPhone)) _box.write('shop_phone', '');
+      if (AuthController.isLegacySeededAddress(storedAddress)) _box.write('shop_address', '');
+    }
+
     _loadPrinters();
     _loadActionPasswordStatus();
   }
@@ -152,6 +171,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await _box.write('shop_phone', phone);
     await _box.write('shop_address', address);
     await _box.write('footer_note', footer);
+    await _box.write('store_profile_customized', true);
 
     if (_selectedPrinter != null) {
       await _billController.setPrinter(_selectedPrinter!);
@@ -338,86 +358,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Separate Edit & Delete Security Password Card
-                      Container(
-                        padding: const EdgeInsets.all(22),
-                        decoration: BoxDecoration(
-                          color: kWhite,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 10, offset: Offset(0, 3))],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.security_rounded, color: kRed, size: 20),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    'Edit & Delete Password',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: kTextDark),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: (_actionPwdConfigured ? kGreen : kOrange).withOpacity(0.14),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    _actionPwdConfigured ? 'Configured' : 'Not Set',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: _actionPwdConfigured ? kGreen : kOrange,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Separate password required before editing or deleting bills, menu items, tables, staff, or expenses (independent from login password).',
-                              style: TextStyle(fontSize: 11.5, color: kTextGray),
-                            ),
-                            const SizedBox(height: 14),
-                            _buildPasswordField('Account Login Password (to authorize) *', _loginPwdCtrl, 'Enter login password'),
-                            const SizedBox(height: 12),
-                            _buildPasswordField('New Edit & Delete Password *', _newActionPwdCtrl, 'Min 4 characters'),
-                            const SizedBox(height: 12),
-                            _buildPasswordField('Confirm Edit & Delete Password *', _confirmActionPwdCtrl, 'Re-enter new password'),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: kRed,
-                                  foregroundColor: kWhite,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                onPressed: _savingActionPwd ? null : _updateActionPassword,
-                                icon: _savingActionPwd
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: kWhite),
-                                      )
-                                    : const Icon(Icons.lock_reset_rounded, size: 18),
-                                label: Text(
-                                  _actionPwdConfigured
-                                      ? 'Update Edit & Delete Password'
-                                      : 'Set Edit & Delete Password',
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
